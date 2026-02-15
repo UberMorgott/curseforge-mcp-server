@@ -16,6 +16,7 @@
     "start": "node build/index.js",
     "dev": "tsx watch src/index.ts",
     "setup": "tsx src/setup.ts",
+    "prepare": "tsc",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
