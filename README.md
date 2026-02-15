@@ -1,0 +1,185 @@
+# curseforge-mcp-server
+
+Universal MCP server for full CurseForge platform management. Search mods, upload files, manage comments, view analytics — works with any game (Minecraft, Hytale, WoW, etc.).
+
+25 tools across 4 API layers, all via direct HTTP. Zero-config mode available — just have CurseForge open in your browser.
+
+## Quick Install
+
+### Claude Code
+
+```bash
+claude mcp add curseforge-mcp-server -- npx curseforge-mcp-server
+```
+
+With environment variables:
+
+```bash
+claude mcp add curseforge-mcp-server \
+  -e CURSEFORGE_API_KEY=your-key \
+  -e CURSEFORGE_AUTHOR_TOKEN=your-token \
+  -- npx curseforge-mcp-server
+```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "curseforge": {
+      "command": "npx",
+      "args": ["-y", "curseforge-mcp-server"],
+      "env": {
+        "CURSEFORGE_API_KEY": "your-key",
+        "CURSEFORGE_AUTHOR_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project or `~/.cursor/mcp.json` globally:
+
+```json
+{
+  "mcpServers": {
+    "curseforge": {
+      "command": "npx",
+      "args": ["-y", "curseforge-mcp-server"],
+      "env": {
+        "CURSEFORGE_API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "curseforge": {
+      "command": "npx",
+      "args": ["-y", "curseforge-mcp-server"],
+      "env": {
+        "CURSEFORGE_API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+## Access Levels
+
+All credentials are optional. The server works in three tiers:
+
+| Level | What you need | Tools available |
+|-------|--------------|-----------------|
+| **Zero-config** | Just a CurseForge session in your browser | 2 CFWidget tools + 9 Web API tools (comments, settings, analytics) |
+| **Recommended** | + `CURSEFORGE_API_KEY` | + 11 Core API tools (search, files, categories) |
+| **Full** | + `CURSEFORGE_AUTHOR_TOKEN` | + 4 Upload tools (upload files, manage versions) |
+
+### Getting credentials
+
+- **API Key**: Create at [console.curseforge.com](https://console.curseforge.com/) (free)
+- **Author Token**: Get from [authors.curseforge.com/account/api-tokens](https://authors.curseforge.com/account/api-tokens)
+- **Session cookies**: Auto-extracted from your browser, or set manually via the `cf_set_cookies` tool
+
+## Tools (25)
+
+### Core API (11) — requires API key
+
+| Tool | Description |
+|------|-------------|
+| `search_mods` | Search mods by name, category, game version, mod loader |
+| `get_mod` | Get full mod details by ID |
+| `get_mod_files` | List files for a mod with filtering |
+| `get_mod_file` | Get specific file details |
+| `get_mod_description` | Get mod description (HTML or text) |
+| `get_mod_changelog` | Get changelog for a file release |
+| `get_download_url` | Get direct download URL |
+| `get_featured_mods` | Get popular/featured/recently updated mods |
+| `get_mods_batch` | Fetch multiple mods by ID in one request |
+| `get_categories` | Get available mod categories |
+| `get_game_versions` | List games or get game details |
+
+### CFWidget (2) — always available, no key needed
+
+| Tool | Description |
+|------|-------------|
+| `get_project` | Get project info by ID or path |
+| `search_author` | Find author by username, list their projects |
+
+### Upload API (4) — requires author token
+
+| Tool | Description |
+|------|-------------|
+| `upload_file` | Upload a mod file to a project |
+| `get_upload_game_versions` | Get version IDs for upload form |
+| `get_upload_game_version_types` | Get version type categories |
+| `get_upload_dependencies` | Get available dependency options |
+
+### Web API (9) — requires session cookies
+
+| Tool | Description |
+|------|-------------|
+| `cf_set_cookies` | Set session cookies manually |
+| `cf_auto_extract_cookies` | Auto-extract cookies from browser |
+| `get_comments` | Read threaded comments on a project |
+| `post_comment` | Post a comment or reply |
+| `delete_comment` | Delete a comment |
+| `get_project_analytics` | Get project analytics/statistics |
+| `get_project_settings` | Get project settings |
+| `update_project_description` | Update project description |
+| `cf_fetch_page` | Raw request to any CurseForge API endpoint |
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CURSEFORGE_API_KEY` | No | Core API key from [console.curseforge.com](https://console.curseforge.com/) |
+| `CURSEFORGE_AUTHOR_TOKEN` | No | Author token for file uploads |
+| `CURSEFORGE_GAME_SLUG` | No | Default game slug for upload API (e.g. `hytale`, `minecraft`) |
+
+## Development
+
+```bash
+git clone <repo>
+cd curseforge-mcp-server
+npm install
+npm run build      # compile TypeScript
+npm start          # run server (stdio)
+npm run dev        # dev mode with hot reload
+npm run setup      # interactive setup wizard
+```
+
+### Testing
+
+```bash
+npx @modelcontextprotocol/inspector node build/index.js
+```
+
+## How it works
+
+The server uses four API layers, all via direct HTTP (no browser automation):
+
+1. **Core API** — Full mod data via `curseforge-api` npm package
+2. **CFWidget** — Project/author lookup, zero-config fallback
+3. **Upload API** — File uploads via CurseForge author endpoints
+4. **Web API** — Comments, settings, analytics via internal REST endpoints + session cookies
+
+Session cookies are auto-extracted from your browser via `@rookie-rs/api` (supports 12+ browsers on Windows, macOS, and Linux).
+
+## License
+
+MIT

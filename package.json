@@ -1,0 +1,46 @@
+{
+  "name": "curseforge-mcp-server",
+  "version": "0.2.0",
+  "description": "Universal MCP server for CurseForge platform management — search mods, upload files, manage comments, analytics. Works with any game (Minecraft, Hytale, WoW, etc.).",
+  "type": "module",
+  "main": "./build/index.js",
+  "bin": {
+    "curseforge-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsx watch src/index.ts",
+    "setup": "tsx src/setup.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "curseforge",
+    "minecraft",
+    "hytale",
+    "modding",
+    "model-context-protocol"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@rookie-rs/api": "^0.5.6",
+    "curseforge-api": "^1.3.0",
+    "dotenv": "^17.2.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
