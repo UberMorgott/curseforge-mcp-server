@@ -1,26 +1,30 @@
 #!/usr/bin/env node
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createServer } from "./server.js";
 
-async function main() {
-  const server = await createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("[curseforge-mcp] Server running on stdio");
+// --setup flag: run interactive setup wizard instead of server
+if (process.argv.includes("--setup")) {
+  import("./setup.js");
+} else {
+  import("@modelcontextprotocol/sdk/server/stdio.js").then(
+    async ({ StdioServerTransport }) => {
+      const { createServer } = await import("./server.js");
+      const server = await createServer();
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+      console.error("[curseforge-mcp] Server running on stdio");
 
-  const shutdown = async () => {
-    console.error("[curseforge-mcp] Shutting down...");
-    try {
-      await server.close();
-    } catch {}
-    process.exit(0);
-  };
+      const shutdown = async () => {
+        console.error("[curseforge-mcp] Shutting down...");
+        try {
+          await server.close();
+        } catch {}
+        process.exit(0);
+      };
 
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+    },
+  ).catch((err) => {
+    console.error("[curseforge-mcp] Fatal error:", err);
+    process.exit(1);
+  });
 }
-
-main().catch((err) => {
-  console.error("[curseforge-mcp] Fatal error:", err);
-  process.exit(1);
-});

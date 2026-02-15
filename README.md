@@ -6,19 +6,24 @@ Universal MCP server for full CurseForge platform management. Search mods, uploa
 
 ## Quick Install
 
-### Claude Code
+### 1. Setup (interactive wizard)
+
+```bash
+npx -y github:UberMorgott/curseforge-mcp-server --setup
+```
+
+The wizard will:
+- Auto-extract session cookies from your browser
+- Ask for API Key (opens [console.curseforge.com](https://console.curseforge.com/#/api-keys)) — or skip
+- Ask for Author Token (opens [curseforge.com/account/api-tokens](https://www.curseforge.com/account/api-tokens)) — or skip
+- Show how many tools are available with your config
+
+### 2. Add to your AI client
+
+#### Claude Code
 
 ```bash
 claude mcp add curseforge-mcp-server -- npx -y github:UberMorgott/curseforge-mcp-server
-```
-
-With environment variables:
-
-```bash
-claude mcp add curseforge-mcp-server \
-  -e CURSEFORGE_API_KEY=your-key \
-  -e CURSEFORGE_AUTHOR_TOKEN=your-token \
-  -- npx -y github:UberMorgott/curseforge-mcp-server
 ```
 
 ### Claude Desktop
