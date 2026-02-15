@@ -1,15 +1,15 @@
 # curseforge-mcp-server
 
-Universal MCP server for full CurseForge platform management. Search mods, upload files, manage comments, view analytics — works with any game (Minecraft, Hytale, WoW, etc.).
+Universal MCP server for full CurseForge platform management. Search mods, upload files, manage comments, edit descriptions — works with any game (Minecraft, Hytale, WoW, etc.).
 
-25 tools across 4 API layers, all via direct HTTP. Zero-config mode available — just have CurseForge open in your browser.
+27 tools across 4 API layers, all via direct HTTP. Zero-config mode available — just have CurseForge open in your browser.
 
 ## Quick Install
 
 ### Claude Code
 
 ```bash
-claude mcp add curseforge-mcp-server -- npx curseforge-mcp-server
+claude mcp add curseforge-mcp-server -- npx -y github:UberMorgott/curseforge-mcp-server
 ```
 
 With environment variables:
@@ -18,7 +18,7 @@ With environment variables:
 claude mcp add curseforge-mcp-server \
   -e CURSEFORGE_API_KEY=your-key \
   -e CURSEFORGE_AUTHOR_TOKEN=your-token \
-  -- npx curseforge-mcp-server
+  -- npx -y github:UberMorgott/curseforge-mcp-server
 ```
 
 ### Claude Desktop
@@ -33,7 +33,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "curseforge": {
       "command": "npx",
-      "args": ["-y", "curseforge-mcp-server"],
+      "args": ["-y", "github:UberMorgott/curseforge-mcp-server"],
       "env": {
         "CURSEFORGE_API_KEY": "your-key",
         "CURSEFORGE_AUTHOR_TOKEN": "your-token"
@@ -52,7 +52,7 @@ Add to `.cursor/mcp.json` in your project or `~/.cursor/mcp.json` globally:
   "mcpServers": {
     "curseforge": {
       "command": "npx",
-      "args": ["-y", "curseforge-mcp-server"],
+      "args": ["-y", "github:UberMorgott/curseforge-mcp-server"],
       "env": {
         "CURSEFORGE_API_KEY": "your-key"
       }
@@ -70,7 +70,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "curseforge": {
       "command": "npx",
-      "args": ["-y", "curseforge-mcp-server"],
+      "args": ["-y", "github:UberMorgott/curseforge-mcp-server"],
       "env": {
         "CURSEFORGE_API_KEY": "your-key"
       }
@@ -79,25 +79,35 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
+### Manual install
+
+```bash
+git clone https://github.com/UberMorgott/curseforge-mcp-server.git
+cd curseforge-mcp-server
+npm install && npm run build
+```
+
+Then point your MCP client to `node /path/to/curseforge-mcp-server/build/index.js`.
+
 ## Access Levels
 
 All credentials are optional. The server works in three tiers:
 
 | Level | What you need | Tools available |
 |-------|--------------|-----------------|
-| **Zero-config** | Just a CurseForge session in your browser | 2 CFWidget tools + 9 Web API tools (comments, settings, analytics) |
-| **Recommended** | + `CURSEFORGE_API_KEY` | + 11 Core API tools (search, files, categories) |
+| **Zero-config** | Just a CurseForge session in your browser | 2 CFWidget tools + 9 Web API tools (comments, description, analytics) |
+| **Recommended** | + `CURSEFORGE_API_KEY` | + 12 Core API tools (search, files, categories) |
 | **Full** | + `CURSEFORGE_AUTHOR_TOKEN` | + 4 Upload tools (upload files, manage versions) |
 
 ### Getting credentials
 
 - **API Key**: Create at [console.curseforge.com](https://console.curseforge.com/) (free)
-- **Author Token**: Get from [authors.curseforge.com/account/api-tokens](https://authors.curseforge.com/account/api-tokens)
+- **Author Token**: Get from [curseforge.com/account/api-tokens](https://www.curseforge.com/account/api-tokens)
 - **Session cookies**: Auto-extracted from your browser, or set manually via the `cf_set_cookies` tool
 
-## Tools (25)
+## Tools (27)
 
-### Core API (11) — requires API key
+### Core API (12) — requires API key
 
 | Tool | Description |
 |------|-------------|
@@ -108,6 +118,7 @@ All credentials are optional. The server works in three tiers:
 | `get_mod_description` | Get mod description (HTML or text) |
 | `get_mod_changelog` | Get changelog for a file release |
 | `get_download_url` | Get direct download URL |
+| `download_mod` | Download a mod file to local directory |
 | `get_featured_mods` | Get popular/featured/recently updated mods |
 | `get_mods_batch` | Fetch multiple mods by ID in one request |
 | `get_categories` | Get available mod categories |
@@ -140,7 +151,7 @@ All credentials are optional. The server works in three tiers:
 | `delete_comment` | Delete a comment |
 | `get_project_analytics` | Get project analytics/statistics |
 | `get_project_settings` | Get project settings |
-| `update_project_description` | Update project description |
+| `update_project_description` | Update project description (HTML) |
 | `cf_fetch_page` | Raw request to any CurseForge API endpoint |
 
 ## Environment Variables
@@ -154,7 +165,7 @@ All credentials are optional. The server works in three tiers:
 ## Development
 
 ```bash
-git clone <repo>
+git clone https://github.com/UberMorgott/curseforge-mcp-server.git
 cd curseforge-mcp-server
 npm install
 npm run build      # compile TypeScript
@@ -176,7 +187,7 @@ The server uses four API layers, all via direct HTTP (no browser automation):
 1. **Core API** — Full mod data via `curseforge-api` npm package
 2. **CFWidget** — Project/author lookup, zero-config fallback
 3. **Upload API** — File uploads via CurseForge author endpoints
-4. **Web API** — Comments, settings, analytics via internal REST endpoints + session cookies
+4. **Web API** — Comments, description editing, analytics via internal REST endpoints + session cookies
 
 Session cookies are auto-extracted from your browser via `@rookie-rs/api` (supports 12+ browsers on Windows, macOS, and Linux).
 
