@@ -2,7 +2,7 @@
 
 ## Overview
 Universal MCP server for full CurseForge platform management — any game (Minecraft, Hytale, WoW, etc.).
-27 tools: search mods, download files, upload files, manage comments, project settings, analytics.
+25 tools: search mods, download files, upload files, manage comments, project settings.
 Zero-config: auto-extracts browser cookies, CFWidget tools work without any API key.
 
 ## Build & Run
@@ -30,7 +30,7 @@ Tools registered in `src/tools/` files. Server assembly in `src/server.ts`.
 |-------|------------|-----------------|
 | Zero-config | None (just logged in browser) | `get_project`, `search_author` + all Web API tools (cookies auto-extracted) |
 | Recommended | + `CURSEFORGE_API_KEY` | + 11 Core API tools (search, files, categories, etc.) |
-| Full | + `CURSEFORGE_AUTHOR_TOKEN` | + 4 Upload tools (upload files, game versions, dependencies) |
+| Full | + `CURSEFORGE_AUTHOR_TOKEN` | + 3 Upload tools (upload files, game versions) |
 
 ## Configuration
 
@@ -40,7 +40,7 @@ All credentials optional — stored in `.env`:
 - `CURSEFORGE_GAME_SLUG` — default game slug for upload API (e.g. "hytale", "minecraft")
 - `.auth/cookies.json` — session cookies for Web API (auto-extracted from browser on startup)
 
-## Tools (27 total)
+## Tools (25 total)
 
 **Core API (12)** — requires API key:
 `search_mods`, `get_mod`, `get_mod_files`, `get_mod_file`, `get_mod_description`, `get_mod_changelog`, `get_download_url`, `download_mod`, `get_featured_mods`, `get_mods_batch`, `get_categories`, `get_game_versions`
@@ -48,11 +48,11 @@ All credentials optional — stored in `.env`:
 **CFWidget (2)** — always available, no key needed:
 `get_project`, `search_author`
 
-**Upload API (4)** — requires author token:
-`upload_file`, `get_upload_game_versions`, `get_upload_game_version_types`, `get_upload_dependencies`
+**Upload API (3)** — requires author token:
+`upload_file`, `get_upload_game_versions`, `get_upload_game_version_types`
 
-**Web API (9)** — requires session cookies (auto-extracted):
-`cf_set_cookies`, `cf_auto_extract_cookies`, `get_comments`, `post_comment`, `delete_comment`, `get_project_analytics`, `get_project_settings`, `update_project_description`, `cf_fetch_page`
+**Web API (8)** — requires session cookies (auto-extracted):
+`cf_set_cookies`, `cf_auto_extract_cookies`, `get_comments`, `post_comment`, `delete_comment`, `get_project_settings`, `update_project_description`, `cf_fetch_page`
 
 ## Key Conventions
 

@@ -135,30 +135,4 @@ export function registerUploadApiTools(
     },
   );
 
-  server.registerTool(
-    "get_upload_dependencies",
-    {
-      title: "Get Upload Dependencies",
-      description: "Get available dependency options for the upload form.",
-      inputSchema: {
-        game_slug: z.string().optional().describe('Game slug (e.g. "hytale", "minecraft"). Currently unused — dependencies are global.'),
-      },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
-    },
-    async () => {
-      try {
-        const deps = await client.getGameDependencies();
-        const lines = deps.map((d) => `[${d.id}] ${d.name} (${d.slug})`);
-        return success(`${deps.length} dependencies:\n${lines.join("\n")}`);
-      } catch (e) {
-        return error(`get_upload_dependencies: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    },
-  );
-
 }

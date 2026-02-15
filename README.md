@@ -2,7 +2,7 @@
 
 Universal MCP server for full CurseForge platform management. Search mods, upload files, manage comments, edit descriptions — works with any game (Minecraft, Hytale, WoW, etc.).
 
-27 tools across 4 API layers, all via direct HTTP. Zero-config mode available — just have CurseForge open in your browser.
+25 tools across 4 API layers, all via direct HTTP. Zero-config mode available — just have CurseForge open in your browser.
 
 ## Quick Install
 
@@ -102,7 +102,7 @@ All credentials are optional. The server works in three tiers:
 |-------|--------------|-----------------|
 | **Zero-config** | Just a CurseForge session in your browser | 2 CFWidget tools + 9 Web API tools (comments, description, analytics) |
 | **Recommended** | + `CURSEFORGE_API_KEY` | + 12 Core API tools (search, files, categories) |
-| **Full** | + `CURSEFORGE_AUTHOR_TOKEN` | + 4 Upload tools (upload files, manage versions) |
+| **Full** | + `CURSEFORGE_AUTHOR_TOKEN` | + 3 Upload tools (upload files, manage versions) |
 
 ### Getting credentials
 
@@ -110,7 +110,7 @@ All credentials are optional. The server works in three tiers:
 - **Author Token**: Get from [curseforge.com/account/api-tokens](https://www.curseforge.com/account/api-tokens)
 - **Session cookies**: Auto-extracted from your browser, or set manually via the `cf_set_cookies` tool
 
-## Tools (27)
+## Tools (25)
 
 ### Core API (12) — requires API key
 
@@ -136,16 +136,15 @@ All credentials are optional. The server works in three tiers:
 | `get_project` | Get project info by ID or path |
 | `search_author` | Find author by username, list their projects |
 
-### Upload API (4) — requires author token
+### Upload API (3) — requires author token
 
 | Tool | Description |
 |------|-------------|
 | `upload_file` | Upload a mod file to a project |
 | `get_upload_game_versions` | Get version IDs for upload form |
 | `get_upload_game_version_types` | Get version type categories |
-| `get_upload_dependencies` | Get available dependency options |
 
-### Web API (9) — requires session cookies
+### Web API (8) — requires session cookies
 
 | Tool | Description |
 |------|-------------|
@@ -154,8 +153,7 @@ All credentials are optional. The server works in three tiers:
 | `get_comments` | Read threaded comments on a project |
 | `post_comment` | Post a comment or reply |
 | `delete_comment` | Delete a comment |
-| `get_project_analytics` | Get project analytics/statistics |
-| `get_project_settings` | Get project settings |
+| `get_project_settings` | Get project settings/metadata via Authors API |
 | `update_project_description` | Update project description (HTML) |
 | `cf_fetch_page` | Raw request to any CurseForge API endpoint |
 

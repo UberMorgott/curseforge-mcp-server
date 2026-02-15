@@ -43,16 +43,6 @@ export class UploadApiClient {
     return res.json();
   }
 
-  async getGameDependencies(): Promise<
-    Array<{ id: number; name: string; slug: string }>
-  > {
-    const res = await fetch(`${BASE_URL}/api/game/dependencies`, {
-      headers: this.headers(),
-    });
-    if (!res.ok) throw new Error(`Upload API error ${res.status} at ${res.url}`);
-    return res.json();
-  }
-
   async uploadFile(
     projectId: number,
     filePath: string,

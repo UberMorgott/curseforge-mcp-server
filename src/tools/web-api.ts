@@ -158,38 +158,12 @@ export function registerWebApiTools(
   );
 
   server.registerTool(
-    "get_project_analytics",
-    {
-      title: "Get Project Analytics",
-      description: "Get analytics/statistics for a CurseForge project.",
-      inputSchema: {
-        project_id: z.number(),
-      },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
-    },
-    async ({ project_id }) => {
-      if (!client.hasCookies()) return error("No session cookies. Use cf_auto_extract_cookies first.");
-      try {
-        const data = await client.get(`${CF_BASE}/api/v1/mods/${project_id}/analytics`);
-        return success(truncate(compact(data)));
-      } catch (e) {
-        return error(`get_project_analytics: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    },
-  );
-
-  server.registerTool(
     "get_project_settings",
     {
       title: "Get Project Settings",
-      description: "Get settings/metadata for a CurseForge project.",
+      description: "Get settings/metadata for a CurseForge project via Authors API. Returns project config, permissions, status, and more.",
       inputSchema: {
-        project_id: z.number(),
+        project_id: z.number().describe("CurseForge project ID"),
       },
       annotations: {
         readOnlyHint: true,
@@ -201,7 +175,7 @@ export function registerWebApiTools(
     async ({ project_id }) => {
       if (!client.hasCookies()) return error("No session cookies. Use cf_auto_extract_cookies first.");
       try {
-        const data = await client.get(`${CF_BASE}/api/v1/mods/${project_id}/settings`);
+        const data = await client.get(`${AUTHORS_API}/projects/${project_id}`);
         return success(truncate(compact(data)));
       } catch (e) {
         return error(`get_project_settings: ${e instanceof Error ? e.message : String(e)}`);
