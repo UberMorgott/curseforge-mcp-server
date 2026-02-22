@@ -121,7 +121,7 @@ export function registerWebApiTools(
           body: comment_text,
           bodyType: "RawHtml",
         };
-        if (reply_to_id !== undefined) body.parentCommentId = reply_to_id;
+        if (reply_to_id !== undefined) body.parentId = reply_to_id;
         await client.post(`${CF_BASE}/api/v1/comments`, body);
         return success("Comment posted.");
       } catch (e) {
