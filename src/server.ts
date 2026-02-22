@@ -8,7 +8,7 @@ import { registerCoreApiTools } from "./tools/core-api.js";
 import { registerUploadApiTools } from "./tools/upload-api.js";
 import { registerWebApiTools } from "./tools/web-api.js";
 
-export async function createServer(): Promise<McpServer> {
+export async function createServer(): Promise<{ server: McpServer; webClient: WebClient }> {
   const config = loadConfig();
 
   const server = new McpServer({
@@ -64,5 +64,5 @@ export async function createServer(): Promise<McpServer> {
     `[curseforge-mcp] Web API tools registered (cookies: ${webClient.hasCookies() ? "loaded" : "none"})`,
   );
 
-  return server;
+  return { server, webClient };
 }

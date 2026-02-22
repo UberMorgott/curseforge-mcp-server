@@ -2,15 +2,17 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { CookieEntry } from "../utils/types.js";
-import { USER_AGENT } from "../utils/helpers.js";
 import { CookieExtractor } from "./cookie-extractor.js";
+import { BrowserClient } from "./browser-client.js";
 
 export class WebClient {
   private cookies: CookieEntry[] = [];
   private config: Config;
+  private browser: BrowserClient;
 
   constructor(config: Config) {
     this.config = config;
+    this.browser = new BrowserClient();
     this.loadCookies();
   }
 
@@ -18,6 +20,7 @@ export class WebClient {
     if (!this.hasCookies()) {
       await this.autoExtractCookies();
     }
+    this.browser.setCookies(this.cookies);
   }
 
   private loadCookies(): void {
@@ -33,11 +36,11 @@ export class WebClient {
 
   setCookies(cookies: CookieEntry[]): void {
     this.cookies = cookies;
+    this.browser.setCookies(cookies);
     this.saveCookies();
   }
 
   setCookiesFromString(cookieString: string): void {
-    // Parse "name1=value1; name2=value2" format
     const entries: CookieEntry[] = cookieString
       .split(";")
       .map((c) => c.trim())
@@ -55,6 +58,7 @@ export class WebClient {
       .filter((c): c is CookieEntry => c !== null);
 
     this.cookies = entries;
+    this.browser.setCookies(entries);
     this.saveCookies();
   }
 
@@ -66,39 +70,11 @@ export class WebClient {
     writeFileSync(this.config.cookiesPath, JSON.stringify(this.cookies, null, 2));
   }
 
-  private getCookieHeader(): string {
-    return this.cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-  }
-
   private getXsrfToken(): string | undefined {
     const xsrf = this.cookies.find(
       (c) => c.name.toUpperCase() === "XSRF-TOKEN" || c.name.toUpperCase() === "X-XSRF-TOKEN",
     );
     return xsrf?.value;
-  }
-
-  private browserHeaders(targetUrl: string, extra?: Record<string, string>): Record<string, string> {
-    // Auto-detect Origin/Referer from the target URL
-    let origin: string;
-    try {
-      const u = new URL(targetUrl);
-      origin = u.origin;
-    } catch {
-      origin = "https://www.curseforge.com";
-    }
-    const headers: Record<string, string> = {
-      "User-Agent": USER_AGENT,
-      Cookie: this.getCookieHeader(),
-      Accept: "application/json",
-      Origin: origin,
-      Referer: `${origin}/`,
-      ...extra,
-    };
-    const xsrf = this.getXsrfToken();
-    if (xsrf) {
-      headers["X-XSRF-TOKEN"] = xsrf;
-    }
-    return headers;
   }
 
   hasCookies(): boolean {
@@ -111,6 +87,7 @@ export class WebClient {
       const result = await extractor.extractCookies();
       if (result.cookies.length > 0) {
         this.cookies = result.cookies;
+        this.browser.setCookies(result.cookies);
         this.saveCookies();
         return `Extracted ${result.cookies.length} cookies from ${result.browser}`;
       }
@@ -128,24 +105,12 @@ export class WebClient {
     body?: unknown,
     extraHeaders?: Record<string, string>,
   ): Promise<any> {
-    const headers = this.browserHeaders(url, {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    const xsrf = this.getXsrfToken();
+    const headers: Record<string, string> = {
+      ...(xsrf ? { "X-XSRF-TOKEN": xsrf } : {}),
       ...extraHeaders,
-    });
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      const errorBody = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status}: ${url}${errorBody ? `\n${errorBody.slice(0, 500)}` : ""}`);
-    }
-    const contentType = res.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      return res.json();
-    }
-    return res.text();
+    };
+    return this.browser.request(url, method, body, headers);
   }
 
   async get(url: string, extraHeaders?: Record<string, string>): Promise<any> {
@@ -173,5 +138,9 @@ export class WebClient {
     extraHeaders?: Record<string, string>,
   ): Promise<any> {
     return this.request(url, "DELETE", undefined, extraHeaders);
+  }
+
+  async close(): Promise<void> {
+    await this.browser.close();
   }
 }

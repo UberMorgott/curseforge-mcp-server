@@ -16,11 +16,14 @@ npm run dev              # dev mode with hot reload (tsx watch)
 
 ## Architecture
 
-Four API layers — all via direct HTTP (no Playwright/browser):
+Four API layers:
 1. **Core API** (`src/clients/curseforge-client.ts`) — full mod data via `curseforge-api` npm package (requires API key)
 2. **CFWidget** (`src/clients/cfwidget-client.ts`) — project/author lookup, no API key needed
 3. **Upload API** (`src/clients/upload-client.ts`) — file uploads via CurseForge author API (requires author token)
-4. **Web API** (`src/clients/web-client.ts`) — comments, settings, analytics via internal CurseForge REST endpoints + session cookies (auto-extracted from browser)
+4. **Web API** (`src/clients/web-client.ts` → `browser-client.ts`) — comments, settings, description via Chrome browser (bypasses Cloudflare)
+
+Web API uses `puppeteer-real-browser` (optional dep) to launch real Chrome and execute fetch() inside it.
+`BrowserClient` lazily launches Chrome on first Web API call, navigates to curseforge.com to pass CF challenge, then reuses the session for all requests. Core/CFWidget/Upload tools use native HTTP — no browser needed.
 
 Tools registered in `src/tools/` files. Server assembly in `src/server.ts`.
 

@@ -1,3 +1,6 @@
+import { existsSync, accessSync, constants } from "node:fs";
+import { execSync } from "node:child_process";
+
 export function formatJson(data: unknown): string {
   return JSON.stringify(data, null, 2);
 }
@@ -40,7 +43,53 @@ const UA_PLATFORMS: Record<string, string> = {
   linux: "X11; Linux x86_64",
 };
 const platformUA = UA_PLATFORMS[process.platform] || UA_PLATFORMS.linux;
-export const USER_AGENT = `Mozilla/5.0 (${platformUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36`;
+
+function detectChromeVersion(): string {
+  try {
+    const cmds =
+      process.platform === "win32"
+        ? ['reg query "HKLM\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version']
+        : process.platform === "darwin"
+          ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --version"]
+          : ["google-chrome-stable --version", "google-chrome --version", "chromium --version"];
+    for (const cmd of cmds) {
+      try {
+        const out = execSync(cmd, { timeout: 3000, encoding: "utf-8" }).trim();
+        const match = out.match(/(\d+)\.\d+\.\d+\.\d+/);
+        if (match) return match[0];
+      } catch {}
+    }
+  } catch {}
+  return "136.0.0.0";
+}
+
+const chromeVersion = detectChromeVersion();
+export const USER_AGENT = `Mozilla/5.0 (${platformUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`;
+
+export function detectChromeExecutable(): string | null {
+  const canExec = (p: string) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } };
+
+  if (process.platform === "win32") {
+    for (const base of [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA]) {
+      if (!base) continue;
+      const p = `${base}\\Google\\Chrome\\Application\\chrome.exe`;
+      if (existsSync(p)) return p;
+    }
+  } else if (process.platform === "darwin") {
+    const p = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    if (canExec(p)) return p;
+  } else {
+    const candidates = [
+      "/usr/bin/google-chrome-stable", "/usr/bin/google-chrome",
+      "/usr/bin/chromium", "/usr/bin/chromium-browser",
+      "/snap/bin/chromium",
+    ];
+    for (const p of candidates) {
+      if (canExec(p)) return p;
+    }
+  }
+  return null;
+}
 
 export async function safeFetch(
   url: string,

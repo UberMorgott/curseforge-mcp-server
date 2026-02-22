@@ -7,16 +7,15 @@ if (process.argv.includes("--setup")) {
   import("@modelcontextprotocol/sdk/server/stdio.js").then(
     async ({ StdioServerTransport }) => {
       const { createServer } = await import("./server.js");
-      const server = await createServer();
+      const { server, webClient } = await createServer();
       const transport = new StdioServerTransport();
       await server.connect(transport);
       console.error("[curseforge-mcp] Server running on stdio");
 
       const shutdown = async () => {
         console.error("[curseforge-mcp] Shutting down...");
-        try {
-          await server.close();
-        } catch {}
+        try { await webClient.close(); } catch {}
+        try { await server.close(); } catch {}
         process.exit(0);
       };
 
