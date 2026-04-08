@@ -59,9 +59,12 @@ export function registerUploadApiTools(
           changelog: params.changelog,
           changelogType: params.changelog_type,
           displayName: params.display_name,
-          gameVersions: params.game_version_ids || [],
           releaseType: params.release_type,
         };
+
+        if (params.game_version_ids?.length) {
+          metadata.gameVersions = params.game_version_ids;
+        }
 
         if (params.relations && params.relations.length > 0) {
           metadata.relations = { projects: params.relations };

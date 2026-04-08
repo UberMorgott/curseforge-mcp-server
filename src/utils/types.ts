@@ -9,7 +9,7 @@ export interface UploadMetadata {
   changelogType?: "text" | "html" | "markdown";
   displayName?: string;
   parentFileID?: number;
-  gameVersions: number[];
+  gameVersions?: number[];
   releaseType: "alpha" | "beta" | "release";
   relations?: {
     projects: Array<{
