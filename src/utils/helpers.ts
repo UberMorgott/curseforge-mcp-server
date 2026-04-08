@@ -1,5 +1,5 @@
 import { existsSync, accessSync, constants } from "node:fs";
-import { execSync } from "node:child_process";
+import { execSync, exec } from "node:child_process";
 
 export function formatJson(data: unknown): string {
   return JSON.stringify(data, null, 2);
@@ -109,6 +109,13 @@ export async function safeFetch(
     );
   }
   return response;
+}
+
+export function openInDefaultBrowser(url: string): void {
+  const cmd = process.platform === "win32" ? `start "" "${url}"`
+    : process.platform === "darwin" ? `open "${url}"`
+    : `xdg-open "${url}"`;
+  exec(cmd, () => {});
 }
 
 // ── Compact formatters for token efficiency ──

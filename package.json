@@ -45,6 +45,6 @@
     "typescript": "^5.9.3"
   },
   "optionalDependencies": {
-    "puppeteer-real-browser": "^1.4.4"
+    "patchright": "^1.59.3"
   }
 }

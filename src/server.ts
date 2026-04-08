@@ -39,10 +39,15 @@ export async function createServer(): Promise<{ server: McpServer; webClient: We
   // Always register Core API tools (CFWidget tools always available, Core API tools only if key)
   registerCoreApiTools(server, coreClient, cfwidget);
 
-  // Upload API tools — only if author token is provided
+  // Web API tools — always available (must init before Upload API since it provides browser)
+  const webClient = new WebClient(config);
+  await webClient.init();
+  registerWebApiTools(server, webClient);
+
+  // Upload API tools — only if author token is provided (routes through WebClient/patchright)
   if (config.curseforgeAuthorToken) {
     try {
-      const uploadClient = new UploadApiClient(config);
+      const uploadClient = new UploadApiClient(config, webClient);
       registerUploadApiTools(server, uploadClient);
       console.error("[curseforge-mcp] Upload API tools registered");
     } catch (e) {
@@ -55,11 +60,6 @@ export async function createServer(): Promise<{ server: McpServer; webClient: We
       "[curseforge-mcp] No CURSEFORGE_AUTHOR_TOKEN — Upload tools disabled",
     );
   }
-
-  // Web API tools — always available
-  const webClient = new WebClient(config);
-  await webClient.init();
-  registerWebApiTools(server, webClient);
   console.error(
     `[curseforge-mcp] Web API tools registered (cookies: ${webClient.hasCookies() ? "loaded" : "none"})`,
   );

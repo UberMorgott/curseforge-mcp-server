@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { CookieEntry } from "../utils/types.js";
+import { openInDefaultBrowser } from "../utils/helpers.js";
 import { CookieExtractor } from "./cookie-extractor.js";
 import { BrowserClient } from "./browser-client.js";
 
@@ -9,6 +10,7 @@ export class WebClient {
   private cookies: CookieEntry[] = [];
   private config: Config;
   private browser: BrowserClient;
+  private loginAttempted = false;
 
   constructor(config: Config) {
     this.config = config;
@@ -110,7 +112,65 @@ export class WebClient {
       ...(xsrf ? { "X-XSRF-TOKEN": xsrf } : {}),
       ...extraHeaders,
     };
-    return this.browser.request(url, method, body, headers);
+
+    try {
+      return await this.browser.request(url, method, body, headers);
+    } catch (err: any) {
+      // On 401, try login flow once then retry
+      if (err?.message?.includes("HTTP 401") && !this.loginAttempted) {
+        await this.loginFlow();
+        return this.browser.request(url, method, body, headers);
+      }
+      throw err;
+    }
+  }
+
+  private hasAuthCookie(): boolean {
+    return this.cookies.some((c) =>
+      c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
+    );
+  }
+
+  private async loginFlow(): Promise<void> {
+    this.loginAttempted = true;
+    const loginUrl = "https://www.curseforge.com/login";
+    console.error("[web-client] Login required. Opening login page in your default browser...");
+    openInDefaultBrowser(loginUrl);
+
+    // Poll for cookies every 3 seconds, up to 2 minutes
+    const maxWait = 120_000;
+    const pollInterval = 3_000;
+    const start = Date.now();
+
+    while (Date.now() - start < maxWait) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+      const elapsed = Math.round((Date.now() - start) / 1000);
+
+      try {
+        const extractor = new CookieExtractor();
+        const result = await extractor.extractCookies();
+        if (result.cookies.length > 0) {
+          const hasAuth = result.cookies.some((c) =>
+            c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
+          );
+          if (hasAuth) {
+            console.error(`[web-client] Login detected after ${elapsed}s! Applying cookies...`);
+            this.cookies = result.cookies;
+            this.browser.setCookies(result.cookies);
+            this.saveCookies();
+
+            // Refresh browser pages to pick up new auth cookies
+            await this.browser.refreshPages();
+            return;
+          }
+        }
+        console.error(`[web-client] Waiting for login... (${elapsed}s)`);
+      } catch {
+        // Cookie extraction failed — keep polling
+      }
+    }
+
+    console.error("[web-client] Login timeout (2 min). Auth-requiring tools may not work.");
   }
 
   async get(url: string, extraHeaders?: Record<string, string>): Promise<any> {
@@ -138,6 +198,16 @@ export class WebClient {
     extraHeaders?: Record<string, string>,
   ): Promise<any> {
     return this.request(url, "DELETE", undefined, extraHeaders);
+  }
+
+  async uploadFile(
+    url: string,
+    fileBase64: string,
+    fileName: string,
+    metadataJson: string,
+    extraHeaders?: Record<string, string>,
+  ): Promise<unknown> {
+    return this.browser.requestUpload(url, fileBase64, fileName, metadataJson, extraHeaders);
   }
 
   async close(): Promise<void> {
