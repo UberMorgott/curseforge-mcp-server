@@ -3,3 +3,5 @@ build/
 .env
 .auth/
 .mcp.json
+audit-bugs.json
+AUDIT-REPORT.md

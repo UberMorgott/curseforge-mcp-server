@@ -22,7 +22,7 @@ Four API layers:
 3. **Upload API** (`src/clients/upload-client.ts`) — file uploads via CurseForge author API (requires author token)
 4. **Web API** (`src/clients/web-client.ts` → `browser-client.ts`) — comments, settings, description via Chrome browser (bypasses Cloudflare)
 
-Web API uses `puppeteer-real-browser` (optional dep) to launch real Chrome and execute fetch() inside it.
+Web API uses `patchright` (optional dep) — a patched-Playwright stealth fork — to launch real Chrome and execute fetch() inside it.
 `BrowserClient` lazily launches Chrome on first Web API call, navigates to curseforge.com to pass CF challenge, then reuses the session for all requests. Core/CFWidget/Upload tools use native HTTP — no browser needed.
 
 Tools registered in `src/tools/` files. Server assembly in `src/server.ts`.
@@ -32,7 +32,7 @@ Tools registered in `src/tools/` files. Server assembly in `src/server.ts`.
 | Level | Credentials | Tools Available |
 |-------|------------|-----------------|
 | Zero-config | None (just logged in browser) | `get_project`, `search_author` + all Web API tools (cookies auto-extracted) |
-| Recommended | + `CURSEFORGE_API_KEY` | + 11 Core API tools (search, files, categories, etc.) |
+| Recommended | + `CURSEFORGE_API_KEY` | + 12 Core API tools (search, files, categories, etc.) |
 | Full | + `CURSEFORGE_AUTHOR_TOKEN` | + 3 Upload tools (upload files, game versions) |
 
 ## Configuration

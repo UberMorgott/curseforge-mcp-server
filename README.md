@@ -8,7 +8,7 @@ Universal MCP server for full CurseForge platform management. Search mods, uploa
 
 - **Node.js** >= 18
 - **Chrome or Chromium** — required for Web API tools (comments, settings, description). The server uses your installed Chrome to bypass Cloudflare protection. Core API and CFWidget tools work without Chrome.
-- **Desktop OS with display** (Windows, macOS, Linux with GUI) — Chrome runs in headed mode (minimized window). Headless servers (VPS, Docker) need [xvfb](https://en.wikipedia.org/wiki/Xvfb) installed.
+- **Desktop OS with display** (Windows, macOS, Linux with GUI) — Chrome runs in headed mode (minimized window). On headless Linux servers (VPS, Docker) you must provide a display yourself, e.g. run under [`xvfb-run`](https://en.wikipedia.org/wiki/Xvfb) — `patchright` does **not** start xvfb automatically (see [Headless servers](#headless-servers-vps-docker)).
 
 > **Note:** The server launches a **separate Chrome instance** with its own profile — it does not interfere with your running browser. If you only use Core API tools (search, files, categories), Chrome is never launched.
 
@@ -188,13 +188,13 @@ The server uses four API layers:
 
 CurseForge uses Cloudflare protection that blocks all automated HTTP requests (including curl, fetch, and even TLS-fingerprint-matched requests). The only reliable way to access the Web API is through a real browser that can solve Cloudflare's JavaScript challenge.
 
-The server uses [`puppeteer-real-browser`](https://github.com/AugmentedBeing/puppeteer-real-browser) to launch Chrome in a way that passes Cloudflare detection. Chrome is only started when a Web API tool is first called, and the session is reused for all subsequent requests. The Cloudflare challenge typically resolves in ~1 second.
+The server uses [`patchright`](https://www.npmjs.com/package/patchright) — a patched fork of Playwright that strips automation fingerprints (`--enable-automation`, `navigator.webdriver`, etc.) for stealth — to launch your installed Chrome in a way that passes Cloudflare detection. Chrome is launched headed (the window is minimized via CDP once the challenge is solved) and is only started when a Web API tool is first called; the session is reused for all subsequent requests. The Cloudflare challenge typically resolves within a few seconds.
 
 Session cookies are auto-extracted from your browser via `@rookie-rs/api` (supports 12+ browsers on Windows, macOS, and Linux) and injected into the Chrome instance for authenticated requests.
 
 ### Headless servers (VPS, Docker)
 
-On Linux servers without a display, install xvfb:
+Because Chrome runs headed, a display is required for Web API tools. On Linux servers without a real display, install xvfb and run the server under a virtual one — **`patchright` does not start xvfb for you**, so this is a manual step:
 
 ```bash
 # Debian/Ubuntu
@@ -204,7 +204,13 @@ sudo apt-get install xvfb
 sudo pacman -S xorg-server-xvfb
 ```
 
-`puppeteer-real-browser` will use xvfb automatically if no display is available.
+Then wrap the server process with `xvfb-run` (or set `DISPLAY` to an X server you manage):
+
+```bash
+xvfb-run -a node build/index.js
+```
+
+Core API and CFWidget tools use direct HTTP and need no display.
 
 ## Development
 
