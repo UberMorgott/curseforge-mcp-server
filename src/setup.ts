@@ -119,7 +119,26 @@ async function main() {
 // ── Step 1: Auto-extract cookies ──────────────────────────────────
 
 async function stepCookies() {
-  console.error("━━━ Step 1/3: Session Cookies ━━━");
+  console.error("━━━ Step 1/3: Session Cookies (Web API tools) ━━━");
+  console.error("");
+  console.error("  Web API tools (comments, project settings, descriptions) are NOT");
+  console.error("  available through CurseForge's official API. They rely on an");
+  console.error("  UNOFFICIAL workaround:");
+  console.error("    • the server reads your CurseForge session cookies from your browser,");
+  console.error("      and/or drives a dedicated browser window to bypass Cloudflare;");
+  console.error("    • this is not endorsed by CurseForge and may break if their site changes.");
+  console.error("");
+  console.error("  Core API (search/download) and Upload tools do NOT need this and work natively.");
+  console.error("");
+
+  const consent = (await ask("  Enable Web API tools via this workaround? (y/N): ")).toLowerCase();
+  if (consent !== "y" && consent !== "yes") {
+    console.error("");
+    console.error("  Skipped. Web API tools (comments/settings/description) will be unavailable.");
+    console.error("  You can enable them later with the cf_auto_extract_cookies / cf_set_cookies tools.");
+    console.error("");
+    return;
+  }
   console.error("");
 
   // Try automatic extraction first
