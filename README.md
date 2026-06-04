@@ -7,10 +7,12 @@ Universal MCP server for full CurseForge platform management. Search mods, uploa
 ## Requirements
 
 - **Node.js** >= 18
-- **Chrome or Chromium** — required for Web API tools (comments, settings, description). The server uses your installed Chrome to bypass Cloudflare protection. Core API and CFWidget tools work without Chrome.
-- **Desktop OS with display** (Windows, macOS, Linux with GUI) — Chrome runs in headed mode (minimized window). On headless Linux servers (VPS, Docker) you must provide a display yourself, e.g. run under [`xvfb-run`](https://en.wikipedia.org/wiki/Xvfb) — `patchright` does **not** start xvfb automatically (see [Headless servers](#headless-servers-vps-docker)).
+- **Chrome or Chromium** — required **only** for the Web API tools (comments, settings, description), which bypass Cloudflare protection via a real browser. The Core API, CFWidget, and Upload tools are all native HTTP and never launch a browser. Recommended: install patchright's bundled Chromium with `npx patchright install chromium`; the server falls back to your system Chrome if the bundled browser isn't present.
+- **Desktop OS with display** (Windows, macOS, Linux with GUI) — for the Web tier only, the browser runs in headed mode (minimized window). On headless Linux servers (VPS, Docker) you must provide a display yourself, e.g. run under [`xvfb-run`](https://en.wikipedia.org/wiki/Xvfb) — `patchright` does **not** start xvfb automatically (see [Headless servers](#headless-servers-vps-docker)).
 
-> **Note:** The server launches a **separate Chrome instance** with its own profile — it does not interfere with your running browser. If you only use Core API tools (search, files, categories), Chrome is never launched.
+> **Note:** For the Web tier, the server launches a **separate, dedicated browser** with its own persistent profile at `~/.curseforge-mcp/chrome-profile` — it does not interfere with your running browser, and the two can run simultaneously. If you only use Core API, CFWidget, or Upload tools, no browser is ever launched.
+
+> **Native vs workaround:** The Core API (search/files/etc.) and the Upload API are official CurseForge APIs. The Web API tools (comments, project settings, descriptions) have **no official API** and use an **unofficial** browser-automation workaround (session cookies + Cloudflare bypass) that may break if CurseForge changes their site.
 
 ## Quick Install
 
@@ -21,10 +23,12 @@ npx -y github:UberMorgott/curseforge-mcp-server --setup
 ```
 
 The wizard will:
-- Auto-extract session cookies from your browser
+- Ask for explicit consent before enabling the Web API tier (it's the unofficial browser-automation workaround), then auto-extract session cookies from your browser
 - Ask for API Key (opens [console.curseforge.com](https://console.curseforge.com/#/api-keys)) — or skip
 - Ask for Author Token (opens [curseforge.com/account/api-tokens](https://www.curseforge.com/account/api-tokens)) — or skip
 - Show how many tools are available with your config
+
+> If you plan to use the Web tier, install patchright's bundled browser once: `npx patchright install chromium` (recommended; falls back to system Chrome if not installed).
 
 ### 2. Add to your AI client
 
@@ -108,9 +112,9 @@ All credentials are optional. The server works in three tiers:
 
 | Level | What you need | Tools available |
 |-------|--------------|-----------------|
-| **Zero-config** | Just a CurseForge session in your browser | 2 CFWidget tools + 8 Web API tools (comments, description, settings) |
+| **Zero-config** | A CurseForge session in your browser + a browser (Chrome/bundled Chromium) for the unofficial Web tier | 2 CFWidget tools + 8 Web API tools (comments, description, settings) |
 | **Recommended** | + `CURSEFORGE_API_KEY` | + 12 Core API tools (search, files, categories) |
-| **Full** | + `CURSEFORGE_AUTHOR_TOKEN` | + 3 Upload tools (upload files, manage versions) |
+| **Full** | + `CURSEFORGE_AUTHOR_TOKEN` | + 3 Upload tools (upload files, manage versions). Native HTTP — no browser, no per-game config. Works for any game, including newer ones like Hytale. |
 
 ### Getting credentials
 
@@ -152,9 +156,9 @@ All credentials are optional. The server works in three tiers:
 | `get_upload_game_versions` | Get version IDs for upload form |
 | `get_upload_game_version_types` | Get version type categories |
 
-### Web API (8) — requires Chrome + session cookies
+### Web API (8) — requires a browser + session cookies (unofficial workaround)
 
-These tools use a real Chrome browser to bypass Cloudflare protection on curseforge.com. Chrome launches automatically on first use (minimized window) and stays running for the session.
+These tools have no official CurseForge API. They use a real browser (patchright's bundled Chromium, or your system Chrome as fallback) to bypass Cloudflare protection on curseforge.com. The browser launches automatically on first use (minimized window) and stays running for the session. This is an unofficial workaround and may break if CurseForge changes their site.
 
 | Tool | Description |
 |------|-------------|
@@ -173,28 +177,33 @@ These tools use a real Chrome browser to bypass Cloudflare protection on cursefo
 |----------|----------|-------------|
 | `CURSEFORGE_API_KEY` | No | Core API key from [console.curseforge.com](https://console.curseforge.com/) |
 | `CURSEFORGE_AUTHOR_TOKEN` | No | Author token for file uploads |
-| `CURSEFORGE_GAME_SLUG` | No | Default game slug for upload API (e.g. `hytale`, `minecraft`) |
+| `CURSEFORGE_GAME_SLUG` | No | Optional override for the upload API host subdomain. **Leave empty** (the default) — uploads then use the universal `https://www.curseforge.com/api` host, which is context-aware to your author token's game and works for every game (including newer ones like Hytale, which has no dedicated subdomain). Only set a slug (e.g. `minecraft`) for the rare game that responds *only* on its own subdomain; setting it for a game without one (e.g. `hytale`) would 404. |
+| `CURSEFORGE_UPLOAD_DIR` | No | If set, confines `upload_file` reads to this directory |
 
 ## How it works
 
 The server uses four API layers:
 
-1. **Core API** — Full mod data via `curseforge-api` npm package (direct HTTP)
+1. **Core API** — Full mod data via `curseforge-api` npm package (direct HTTP). Official CurseForge API.
 2. **CFWidget** — Project/author lookup, zero-config fallback (direct HTTP)
-3. **Upload API** — File uploads via CurseForge author endpoints (direct HTTP)
-4. **Web API** — Comments, description editing, project settings via Chrome browser
+3. **Upload API** — File uploads via CurseForge's official Upload API (direct HTTPS, no browser). Posts to `https://www.curseforge.com/api/projects/{id}/upload-file` with an `X-Api-Token` header (the token is never placed in the URL). The `www` host is universal and context-aware to your author token's game, so the same host works for every game — Minecraft, WoW, Hytale, and any newer game — with no per-game configuration. `CURSEFORGE_GAME_SLUG` is an optional override of this host (see Environment Variables) and should normally be left empty.
+4. **Web API** — Comments, description editing, project settings via a real browser (unofficial workaround)
 
-### Why Chrome?
+> **Any game, including Hytale.** Reading works via the Core API (Hytale is an approved game, `gameId` 70216, slug `hytale`) and uploading works via the universal `www` host — both with no game-specific configuration. Just leave `CURSEFORGE_GAME_SLUG` empty.
 
-CurseForge uses Cloudflare protection that blocks all automated HTTP requests (including curl, fetch, and even TLS-fingerprint-matched requests). The only reliable way to access the Web API is through a real browser that can solve Cloudflare's JavaScript challenge.
+### Why a browser for the Web tier?
 
-The server uses [`patchright`](https://www.npmjs.com/package/patchright) — a patched fork of Playwright that strips automation fingerprints (`--enable-automation`, `navigator.webdriver`, etc.) for stealth — to launch your installed Chrome in a way that passes Cloudflare detection. Chrome is launched headed (the window is minimized via CDP once the challenge is solved) and is only started when a Web API tool is first called; the session is reused for all subsequent requests. The Cloudflare challenge typically resolves within a few seconds.
+CurseForge uses Cloudflare protection that blocks all automated HTTP requests (including curl, fetch, and even TLS-fingerprint-matched requests). CurseForge has no official API for comments, project settings, or description editing, so the only reliable way to reach those endpoints is through a real browser that can solve Cloudflare's JavaScript challenge. **This applies only to the Web tier** — the Core, CFWidget, and Upload tiers use plain HTTP and never touch a browser.
 
-Session cookies are auto-extracted from your browser via `@rookie-rs/api` (supports 12+ browsers on Windows, macOS, and Linux) and injected into the Chrome instance for authenticated requests.
+The server uses [`patchright`](https://www.npmjs.com/package/patchright) — a patched fork of Playwright that strips automation fingerprints (`--enable-automation`, `navigator.webdriver`, etc.) for stealth. It prefers patchright's **bundled Chromium** (install once with `npx patchright install chromium`) and falls back to your **system Chrome** if the bundled browser isn't present. It runs against a dedicated **persistent profile** at `~/.curseforge-mcp/chrome-profile`, so the logged-in CurseForge session survives across runs and stays isolated from your own Chrome (both can run at the same time). The browser is launched headed (the window is minimized via CDP once the challenge is solved) and is only started when a Web API tool is first called; the session is reused for all subsequent requests. The Cloudflare challenge typically resolves within a few seconds.
+
+Session cookies can be auto-extracted from your browser via `@rookie-rs/api` (supports 12+ browsers on Windows, macOS, and Linux) and injected into the browser instance for authenticated requests.
+
+> **Windows caveat:** Automatic cookie extraction from Chrome 127+ often fails because of App-Bound Encryption. The recommended path is the persistent-profile login — just log in to CurseForge once in the dedicated browser window the server opens, and the session persists — or supply cookies directly via the `cf_set_cookies` tool.
 
 ### Headless servers (VPS, Docker)
 
-Because Chrome runs headed, a display is required for Web API tools. On Linux servers without a real display, install xvfb and run the server under a virtual one — **`patchright` does not start xvfb for you**, so this is a manual step:
+Because the browser runs headed, a display is required for the Web API tools only. On Linux servers without a real display, install xvfb and run the server under a virtual one — **`patchright` does not start xvfb for you**, so this is a manual step:
 
 ```bash
 # Debian/Ubuntu
@@ -210,7 +219,7 @@ Then wrap the server process with `xvfb-run` (or set `DISPLAY` to an X server yo
 xvfb-run -a node build/index.js
 ```
 
-Core API and CFWidget tools use direct HTTP and need no display.
+Core API, CFWidget, and Upload tools use direct HTTP and need no display.
 
 ## Development
 
