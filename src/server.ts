@@ -39,15 +39,11 @@ export async function createServer(): Promise<{ server: McpServer; webClient: We
   // Always register Core API tools (CFWidget tools always available, Core API tools only if key)
   registerCoreApiTools(server, coreClient, cfwidget);
 
-  // Web API tools — always available (must init before Upload API since it provides browser)
+  // Web API tools — always available (must init before Upload API since it provides browser).
+  // init() is non-blocking: on-disk cookies load instantly; auto-extraction runs in the
+  // background so we never delay the MCP initialize handshake (cookie scan can take 30s+).
   const webClient = new WebClient(config);
-  try {
-    await webClient.init();
-  } catch (e) {
-    console.error(
-      `[curseforge-mcp] Web client init failed (web tools degraded): ${e instanceof Error ? e.message : e}`,
-    );
-  }
+  webClient.init();
   registerWebApiTools(server, webClient);
 
   // Upload API tools — only if author token is provided (routes through WebClient/patchright)

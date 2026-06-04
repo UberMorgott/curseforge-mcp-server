@@ -50,7 +50,11 @@ function detectChromeVersion(): string {
           : ["google-chrome-stable --version", "google-chrome --version", "chromium --version"];
     for (const cmd of cmds) {
       try {
-        const out = execSync(cmd, { timeout: 3000, encoding: "utf-8" }).trim();
+        const out = execSync(cmd, {
+          timeout: 3000,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"], // suppress reg/chrome stderr leaking to server stderr
+        }).trim();
         const match = out.match(/(\d+)\.\d+\.\d+\.\d+/);
         if (match) return match[0];
       } catch {}

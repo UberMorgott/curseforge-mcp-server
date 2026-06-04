@@ -18,11 +18,19 @@ export class WebClient {
     this.loadCookies();
   }
 
-  async init(): Promise<void> {
-    if (!this.hasCookies()) {
-      await this.autoExtractCookies();
-    }
+  /** Non-blocking startup: push on-disk cookies to the browser immediately, and
+   *  if none are present kick off auto-extraction in the background. Cookie
+   *  extraction scans multiple browser DBs and can take tens of seconds, so it
+   *  must never block server startup / the MCP initialize handshake. */
+  init(): void {
     this.browser.setCookies(this.cookies);
+    if (!this.hasCookies()) {
+      void this.autoExtractCookies().catch((e) => {
+        console.error(
+          `[web-client] Background cookie extraction failed: ${e instanceof Error ? e.message : e}`,
+        );
+      });
+    }
   }
 
   private loadCookies(): void {
