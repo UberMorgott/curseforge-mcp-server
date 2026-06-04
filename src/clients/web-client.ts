@@ -10,6 +10,7 @@ export class WebClient {
   private config: Config;
   private browser: BrowserClient;
   private loginAttempted = false;
+  private loginPolling = false;
 
   constructor(config: Config) {
     this.config = config;
@@ -110,14 +111,16 @@ export class WebClient {
     }
   }
 
-  /** Reliable cross-OS login: drive the dedicated persistent browser. Open the
-   *  CurseForge login page in it (visible), let the user sign in there, then read
-   *  the session cookies straight from the browser context. Because the profile is
-   *  persistent, the login survives across runs. */
+  /** Reliable cross-OS login: drive the dedicated persistent browser. Opens the
+   *  CurseForge login page (visible) and returns IMMEDIATELY — an interactive login
+   *  can take minutes, far longer than an MCP request timeout, so the cookie capture
+   *  runs in the background. Because the profile is persistent, the login survives
+   *  across runs. (If signing in is awkward, cf_set_cookies is the no-login path.) */
   private async browserLogin(): Promise<string> {
-    console.error(
-      "[web-client] Opening CurseForge login in the dedicated browser window — please log in there...",
-    );
+    if (this.loginPolling) {
+      return "A login window is already open — finish signing in there; your session is captured automatically.";
+    }
+    console.error("[web-client] Opening CurseForge login in the dedicated browser window...");
     try {
       await this.browser.openLoginPage("https://www.curseforge.com/login");
     } catch (e) {
@@ -125,34 +128,43 @@ export class WebClient {
       return `Could not open the login browser: ${msg} (run: npx patchright install chromium)`;
     }
 
+    this.loginPolling = true;
+    void this.pollForLogin().finally(() => {
+      this.loginPolling = false;
+    });
+
+    return (
+      "A CurseForge login window has opened. Log in there — your session is captured " +
+      "automatically once you do, and persists for future runs; then re-run your action. " +
+      "If signing in is awkward, close it and use cf_set_cookies with the Cookie header " +
+      "from a browser where you're already logged in."
+    );
+  }
+
+  /** Background poll: watch the dedicated browser's cookies for an auth cookie
+   *  after the user logs in, then persist the session. Never blocks a request. */
+  private async pollForLogin(): Promise<void> {
     const maxWait = 120_000;
     const pollInterval = 3_000;
     const start = Date.now();
 
     while (Date.now() - start < maxWait) {
       await new Promise((r) => setTimeout(r, pollInterval));
-      const elapsed = Math.round((Date.now() - start) / 1000);
-
       const cookies = await this.browser.getCookies();
       const hasAuth = cookies.some(
         (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
       );
       if (hasAuth) {
-        console.error(`[web-client] Login detected after ${elapsed}s! Applying cookies...`);
         this.cookies = cookies;
         this.browser.setCookies(cookies);
         this.saveCookies();
-
-        // Reset latch so a future 401 (expired cookies) can re-trigger login
-        this.loginAttempted = false;
-
+        this.loginAttempted = false; // allow a future 401 to re-trigger login
         await this.browser.refreshPages();
-        return `Logged in, ${cookies.length} cookies saved`;
+        console.error(`[web-client] Login detected — ${cookies.length} cookies saved.`);
+        return;
       }
-      console.error(`[web-client] Waiting for login... (${elapsed}s)`);
     }
-
-    return "Login timed out (2 min)";
+    console.error("[web-client] Login wait timed out (2 min).");
   }
 
   private async request(
@@ -170,25 +182,16 @@ export class WebClient {
     try {
       return await this.browser.request(url, method, body, headers);
     } catch (err: any) {
-      // On 401, try login flow once then retry
+      // On 401, open the login window (non-blocking) and surface a clear message.
+      // We can't wait for an interactive login within a single request, so the
+      // caller should retry after logging in (or use cf_set_cookies).
       if (err?.message?.includes("HTTP 401") && !this.loginAttempted) {
-        await this.loginFlow();
-        return this.browser.request(url, method, body, headers);
+        this.loginAttempted = true;
+        const msg = await this.browserLogin();
+        throw new Error(`Authentication required. ${msg}`);
       }
       throw err;
     }
-  }
-
-  private hasAuthCookie(): boolean {
-    return this.cookies.some((c) =>
-      c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
-    );
-  }
-
-  private async loginFlow(): Promise<void> {
-    this.loginAttempted = true;
-    const result = await this.browserLogin();
-    console.error(`[web-client] ${result}`);
   }
 
   async get(url: string, extraHeaders?: Record<string, string>): Promise<any> {
