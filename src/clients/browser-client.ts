@@ -1,3 +1,6 @@
+import os from "node:os";
+import path from "node:path";
+import { mkdirSync } from "node:fs";
 import type { Browser, BrowserContext, Page } from "patchright";
 import type { CookieEntry } from "../utils/types.js";
 import { detectChromeExecutable } from "../utils/helpers.js";
@@ -67,54 +70,6 @@ export class BrowserClient {
 
     if (result.status < 200 || result.status >= 300) {
       throw new Error(`HTTP ${result.status}: ${url}${result.body ? `\n${result.body.slice(0, 500)}` : ""}`);
-    }
-    this.resetIdleTimer();
-    if (result.contentType.includes("application/json")) {
-      return JSON.parse(result.body);
-    }
-    return result.body;
-  }
-
-  async requestUpload(
-    url: string,
-    fileBase64: string,
-    fileName: string,
-    metadataJson: string,
-    extraHeaders?: Record<string, string>,
-  ): Promise<unknown> {
-    this.clearIdleTimer();
-    await this.ensureInit();
-    const page = this.mainPage;
-    if (!page) throw new Error("Browser page not initialized");
-
-    const result: FetchResult = await page.evaluate(
-      async ({ reqUrl, b64, name, meta, hdrs }: {
-        reqUrl: string; b64: string; name: string; meta: string; hdrs: Record<string, string>;
-      }) => {
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-        const formData = new FormData();
-        formData.append("metadata", meta);
-        formData.append("file", new Blob([bytes]), name);
-
-        const r = await fetch(reqUrl, {
-          method: "POST",
-          headers: hdrs,
-          body: formData,
-        });
-        return {
-          status: r.status,
-          contentType: r.headers.get("content-type") || "",
-          body: await r.text(),
-        };
-      },
-      { reqUrl: url, b64: fileBase64, name: fileName, meta: metadataJson, hdrs: extraHeaders || {} },
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Upload failed (${result.status}): ${result.body?.slice(0, 500) || url}`);
     }
     this.resetIdleTimer();
     if (result.contentType.includes("application/json")) {
@@ -210,34 +165,29 @@ export class BrowserClient {
       throw new Error(
         "patchright is required for Web API tools (comments, settings, description).\n" +
         "Install: npm install patchright\n" +
-        "Also ensure Chrome or Chromium is installed on your system.",
+        "Then install the bundled browser: npx patchright install chromium",
       );
     }
 
-    const chromePath = detectChromeExecutable();
-    if (!chromePath) {
-      throw new Error(
-        "Could not find Chrome or Chromium.\n" +
-        "Install Chrome and ensure it is accessible (e.g. /usr/bin/google-chrome-stable).",
-      );
-    }
-
-    console.error(`[browser-client] Launching Chrome via patchright: ${chromePath}`);
+    // Dedicated, persistent profile (this file has no Config dependency).
+    // A stable userDataDir keeps the logged-in CurseForge session across runs and
+    // isolates it from the user's own Chrome profile, so the two can coexist.
+    const userDataDir = path.join(os.homedir(), ".curseforge-mcp", "chrome-profile");
+    mkdirSync(userDataDir, { recursive: true });
 
     // patchright patches out automation flags (--enable-automation, navigator.webdriver, etc.)
     // Use launchPersistentContext for maximum stealth.
     //
-    // Launch options below intentionally trade hardening for CF-challenge compatibility:
-    //   - `--no-sandbox` disables the Chrome sandbox, weakening renderer process isolation.
-    //     Only acceptable because we navigate exclusively to trusted CurseForge origins.
     //   - `headless: false` is required to reliably pass the Cloudflare challenge, but it
     //     needs a real display: on Linux/CI run under xvfb (or an equivalent virtual display).
-    const context: BrowserContext = await chromium.launchPersistentContext("", {
-      headless: false,
-      executablePath: chromePath,
-      args: ["--no-sandbox", "--lang=en-US"],
-      viewport: null,
-    });
+    //
+    // Two launch strategies, tried in order:
+    //   1. Bundled Chromium (no executablePath): a separate browser binary, so it coexists
+    //      with the user's running Chrome and never hands off to it. This is the robust path.
+    //   2. System Chrome (executablePath): fallback when the bundled browser isn't installed.
+    //      Reuses the SAME dedicated userDataDir for session persistence. Can still fail if
+    //      the user's own Chrome is already running off a shared install.
+    const context = await this.launchContext(chromium, userDataDir);
     this.context = context;
     this.browser = context.browser();
 
@@ -270,6 +220,71 @@ export class BrowserClient {
     }
 
     console.error("[browser-client] Chrome ready");
+  }
+
+  // Launch a persistent context, preferring patchright's bundled Chromium and falling back
+  // to system Chrome. Both paths share the same dedicated userDataDir for session persistence.
+  private async launchContext(chromium: any, userDataDir: string): Promise<BrowserContext> {
+    // The Chrome sandbox cannot run as root and is unavailable in most containers; only
+    // disable it where the platform actually requires it. Trusted CurseForge origins only.
+    const needsNoSandbox =
+      process.platform === "linux" &&
+      typeof process.getuid === "function" &&
+      process.getuid() === 0;
+    const baseArgs = ["--lang=en-US", ...(needsNoSandbox ? ["--no-sandbox"] : [])];
+    const launchOpts = {
+      headless: false,
+      args: baseArgs,
+      viewport: null,
+    } as const;
+
+    // 1. Bundled Chromium — no executablePath means patchright uses its own browser binary.
+    try {
+      console.error("[browser-client] Launching bundled Chromium via patchright");
+      return await chromium.launchPersistentContext(userDataDir, launchOpts);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const bundledMissing =
+        msg.includes("Executable doesn't exist") || msg.includes("patchright install");
+      if (!bundledMissing) throw err;
+      console.error("[browser-client] Bundled Chromium not installed, falling back to system Chrome");
+    }
+
+    // 2. System Chrome fallback — same dedicated userDataDir.
+    const chromePath = detectChromeExecutable();
+    if (!chromePath) {
+      throw new Error(
+        "patchright's bundled Chromium is not installed and no system Chrome was found.\n" +
+        "Recommended: run `npx patchright install chromium` to install the bundled browser.\n" +
+        "Or install Google Chrome so it can be detected (e.g. /usr/bin/google-chrome-stable).",
+      );
+    }
+
+    console.error(`[browser-client] Launching system Chrome via patchright: ${chromePath}`);
+    try {
+      return await chromium.launchPersistentContext(userDataDir, {
+        ...launchOpts,
+        executablePath: chromePath,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // When the user's own Chrome is already running, launching the same system chrome.exe
+      // hands off to the existing instance and the new process exits immediately.
+      const alreadyRunning =
+        msg.includes("Target page, context or browser has been closed") ||
+        msg.includes("has been closed");
+      if (alreadyRunning) {
+        throw new Error(
+          "Could not launch Chrome for the Web tier because your system Chrome appears to be " +
+          "already running (the new process handed off to the existing instance and exited).\n" +
+          "Fix it one of two ways:\n" +
+          "  (a) Close all Chrome windows and retry, or\n" +
+          "  (b) Recommended: run `npx patchright install chromium` to install patchright's " +
+          "bundled browser, which coexists with your running Chrome.",
+        );
+      }
+      throw err;
+    }
   }
 
   private async navigateAndWaitForCf(page: Page, url: string): Promise<void> {
