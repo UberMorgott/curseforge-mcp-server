@@ -96,11 +96,8 @@ export class CoreApiClient {
     }));
   }
 
-  async getModDescription(
-    modId: number,
-    raw?: boolean,
-  ): Promise<string> {
-    return this.client.getModDescription(modId, stripUndefined({ raw }));
+  async getModDescription(modId: number): Promise<string> {
+    return this.client.getModDescription(modId);
   }
 
   async getCategories(

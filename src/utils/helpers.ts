@@ -1,9 +1,5 @@
 import { existsSync, accessSync, constants } from "node:fs";
-import { execSync, exec } from "node:child_process";
-
-export function formatJson(data: unknown): string {
-  return JSON.stringify(data, null, 2);
-}
+import { execSync, execFile } from "node:child_process";
 
 export function compact(data: unknown): string {
   return JSON.stringify(data);
@@ -63,8 +59,15 @@ function detectChromeVersion(): string {
   return "136.0.0.0";
 }
 
-const chromeVersion = detectChromeVersion();
-export const USER_AGENT = `Mozilla/5.0 (${platformUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`;
+// Lazily computed + memoized: detectChromeVersion() runs execSync (up to 3s),
+// so we defer it off the module-load / server-startup path until first use.
+let _userAgent: string | null = null;
+export function getUserAgent(): string {
+  if (_userAgent === null) {
+    _userAgent = `Mozilla/5.0 (${platformUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${detectChromeVersion()} Safari/537.36`;
+  }
+  return _userAgent;
+}
 
 export function detectChromeExecutable(): string | null {
   const canExec = (p: string) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } };
@@ -91,31 +94,14 @@ export function detectChromeExecutable(): string | null {
   return null;
 }
 
-export async function safeFetch(
-  url: string,
-  options?: RequestInit,
-): Promise<Response> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "User-Agent": USER_AGENT,
-      ...options?.headers,
-    },
-  });
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `HTTP ${response.status} ${response.statusText}: ${url}${body ? `\n${body.slice(0, 500)}` : ""}`,
-    );
-  }
-  return response;
-}
-
 export function openInDefaultBrowser(url: string): void {
-  const cmd = process.platform === "win32" ? `start "" "${url}"`
-    : process.platform === "darwin" ? `open "${url}"`
-    : `xdg-open "${url}"`;
-  exec(cmd, () => {});
+  if (process.platform === "win32") {
+    execFile("cmd", ["/c", "start", "", url], () => {});
+  } else if (process.platform === "darwin") {
+    execFile("open", [url], () => {});
+  } else {
+    execFile("xdg-open", [url], () => {});
+  }
 }
 
 // ── Compact formatters for token efficiency ──
@@ -130,6 +116,7 @@ function fmtNum(n: number): string {
 function fmtDate(d: string | Date | undefined): string {
   if (!d) return "?";
   const date = typeof d === "string" ? new Date(d) : d;
+  if (isNaN(date.getTime())) return "?";
   return date.toISOString().slice(0, 10);
 }
 
@@ -188,13 +175,6 @@ export function formatFile(f: any): string {
   if (versions) line += `\n  versions: ${versions}`;
   if (f.downloadUrl) line += `\n  url: ${f.downloadUrl}`;
   return line;
-}
-
-export function formatComment(c: any): string {
-  const author = c.author?.displayName || c.author?.username || "?";
-  const date = c.datePosted ? fmtDate(new Date(c.datePosted)) : "?";
-  const text = (c.text || c.body || "").slice(0, 200);
-  return `[${c.id}] ${author} (${date}): ${text}`;
 }
 
 export function formatCommentThread(c: any): string {

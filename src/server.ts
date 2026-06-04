@@ -41,7 +41,13 @@ export async function createServer(): Promise<{ server: McpServer; webClient: We
 
   // Web API tools — always available (must init before Upload API since it provides browser)
   const webClient = new WebClient(config);
-  await webClient.init();
+  try {
+    await webClient.init();
+  } catch (e) {
+    console.error(
+      `[curseforge-mcp] Web client init failed (web tools degraded): ${e instanceof Error ? e.message : e}`,
+    );
+  }
   registerWebApiTools(server, webClient);
 
   // Upload API tools — only if author token is provided (routes through WebClient/patchright)

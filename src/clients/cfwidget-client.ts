@@ -1,11 +1,11 @@
-import { USER_AGENT } from "../utils/helpers.js";
+import { getUserAgent } from "../utils/helpers.js";
 
 const BASE = "https://api.cfwidget.com";
 
 export class CfWidgetClient {
   private async get(path: string): Promise<any> {
     const res = await fetch(`${BASE}${path}`, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      headers: { "User-Agent": getUserAgent(), Accept: "application/json" },
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");

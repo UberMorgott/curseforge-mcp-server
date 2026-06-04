@@ -159,6 +159,9 @@ export class WebClient {
             this.browser.setCookies(result.cookies);
             this.saveCookies();
 
+            // Reset latch so a future 401 (expired cookies) can re-trigger login
+            this.loginAttempted = false;
+
             // Refresh browser pages to pick up new auth cookies
             await this.browser.refreshPages();
             return;

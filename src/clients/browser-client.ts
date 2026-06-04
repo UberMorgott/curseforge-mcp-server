@@ -1,3 +1,4 @@
+import type { Browser, BrowserContext, Page } from "patchright";
 import type { CookieEntry } from "../utils/types.js";
 import { detectChromeExecutable } from "../utils/helpers.js";
 
@@ -7,15 +8,17 @@ interface FetchResult {
   body: string;
 }
 
-const IDLE_TIMEOUT_MS = 30_000;
+// 5 min idle window — long enough to avoid a costly full CF-challenge re-launch
+// between successive requests, short enough to eventually free Chrome when idle.
+const IDLE_TIMEOUT_MS = 300_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CF_WAIT_MS = 45_000;
 
 export class BrowserClient {
-  private browser: any = null;
-  private context: any = null;
-  private mainPage: any = null;
-  private authorsPage: any = null;
+  private browser: Browser | null = null;
+  private context: BrowserContext | null = null;
+  private mainPage: Page | null = null;
+  private authorsPage: Page | null = null;
   private cookies: CookieEntry[] = [];
   private initPromise: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -36,6 +39,7 @@ export class BrowserClient {
     await this.ensureInit();
     const isAuthors = url.includes("authors.curseforge.com");
     const page = isAuthors ? this.authorsPage : this.mainPage;
+    if (!page) throw new Error("Browser page not initialized");
 
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -81,6 +85,7 @@ export class BrowserClient {
     this.clearIdleTimer();
     await this.ensureInit();
     const page = this.mainPage;
+    if (!page) throw new Error("Browser page not initialized");
 
     const result: FetchResult = await page.evaluate(
       async ({ reqUrl, b64, name, meta, hdrs }: {
@@ -147,7 +152,7 @@ export class BrowserClient {
   }
 
   private async evaluateWithTimeout(
-    page: any,
+    page: Page,
     url: string,
     fetchOpts: { method: string; headers: Record<string, string>; body?: string },
   ): Promise<FetchResult> {
@@ -220,26 +225,33 @@ export class BrowserClient {
     console.error(`[browser-client] Launching Chrome via patchright: ${chromePath}`);
 
     // patchright patches out automation flags (--enable-automation, navigator.webdriver, etc.)
-    // Use launchPersistentContext for maximum stealth
-    this.context = await chromium.launchPersistentContext("", {
+    // Use launchPersistentContext for maximum stealth.
+    //
+    // Launch options below intentionally trade hardening for CF-challenge compatibility:
+    //   - `--no-sandbox` disables the Chrome sandbox, weakening renderer process isolation.
+    //     Only acceptable because we navigate exclusively to trusted CurseForge origins.
+    //   - `headless: false` is required to reliably pass the Cloudflare challenge, but it
+    //     needs a real display: on Linux/CI run under xvfb (or an equivalent virtual display).
+    const context: BrowserContext = await chromium.launchPersistentContext("", {
       headless: false,
       executablePath: chromePath,
       args: ["--no-sandbox", "--lang=en-US"],
       viewport: null,
     });
-    this.browser = this.context.browser?.() || this.context;
+    this.context = context;
+    this.browser = context.browser();
 
     const playwrightCookies = this.cookies.map(toPlaywrightCookie);
-    if (playwrightCookies.length) await this.context.addCookies(playwrightCookies);
+    if (playwrightCookies.length) await context.addCookies(playwrightCookies);
 
     // Use existing blank page for main site
-    const pages = this.context.pages();
-    this.mainPage = pages[0] || await this.context.newPage();
+    const pages = context.pages();
+    this.mainPage = pages[0] || await context.newPage();
     console.error("[browser-client] Navigating to www.curseforge.com...");
     await this.navigateAndWaitForCf(this.mainPage, "https://www.curseforge.com/");
 
     // Open second page for authors site
-    this.authorsPage = await this.context.newPage();
+    this.authorsPage = await context.newPage();
     console.error("[browser-client] Navigating to authors.curseforge.com...");
     await this.navigateAndWaitForCf(this.authorsPage, "https://authors.curseforge.com/");
 
@@ -260,7 +272,7 @@ export class BrowserClient {
     console.error("[browser-client] Chrome ready");
   }
 
-  private async navigateAndWaitForCf(page: any, url: string): Promise<void> {
+  private async navigateAndWaitForCf(page: Page, url: string): Promise<void> {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
 
     const start = Date.now();
