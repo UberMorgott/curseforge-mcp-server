@@ -19,17 +19,33 @@ export class WebClient {
   }
 
   /** Non-blocking startup: push on-disk cookies to the browser immediately, and
-   *  if none are present kick off auto-extraction in the background. Cookie
-   *  extraction scans multiple browser DBs and can take tens of seconds, so it
-   *  must never block server startup / the MCP initialize handshake. */
+   *  if none are present try a SILENT system-browser extraction in the background.
+   *  Never opens a login window here — that would launch a browser/navigation that
+   *  races with real web requests and is intrusive on every startup. Interactive
+   *  login happens only via the cf_auto_extract_cookies tool or on a 401. */
   init(): void {
     this.browser.setCookies(this.cookies);
     if (!this.hasCookies()) {
-      void this.autoExtractCookies().catch((e) => {
+      void this.backgroundExtract();
+    }
+  }
+
+  /** Silent @rookie-rs extraction for startup; no login window, no throw. */
+  private async backgroundExtract(): Promise<void> {
+    try {
+      const result = await new CookieExtractor().extractCookies();
+      if (result.cookies.length > 0) {
+        this.cookies = result.cookies;
+        this.browser.setCookies(result.cookies);
+        this.saveCookies();
         console.error(
-          `[web-client] Background cookie extraction failed: ${e instanceof Error ? e.message : e}`,
+          `[web-client] Extracted ${result.cookies.length} cookies from ${result.browser}`,
         );
-      });
+      }
+    } catch (e) {
+      console.error(
+        `[web-client] Background cookie extraction failed: ${e instanceof Error ? e.message : e}`,
+      );
     }
   }
 
