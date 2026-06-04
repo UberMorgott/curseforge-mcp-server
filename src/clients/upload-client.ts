@@ -15,33 +15,30 @@ export class UploadApiClient {
     }
     this.token = config.curseforgeAuthorToken;
     this.uploadDir = config.uploadDir;
-    // Validate the slug: it becomes the host of token-bearing requests, so reject
-    // anything that could redirect the token to another origin.
+    // Host: www.curseforge.com is the universal upload host and works for every
+    // game (including new ones like Hytale that have no dedicated subdomain).
+    // CURSEFORGE_GAME_SLUG is an optional override for the rare game that only
+    // responds on its own subdomain; leave it empty unless you know you need it.
+    // Validate any override since it forms the host of token-bearing requests.
     const slug = config.curseforgeGameSlug;
-    if (!/^[a-z0-9-]+$/.test(slug)) {
+    if (slug && !/^[a-z0-9-]+$/.test(slug)) {
       throw new Error(
-        `Invalid CURSEFORGE_GAME_SLUG "${slug}" — must match [a-z0-9-] (e.g. "minecraft", "hytale").`,
+        `Invalid CURSEFORGE_GAME_SLUG "${slug}" — must match [a-z0-9-] (e.g. "minecraft"). Leave empty to use www.curseforge.com.`,
       );
     }
-    this.baseUrl = `https://${slug}.curseforge.com/api`;
+    const host = slug && slug !== "www" ? `${slug}.curseforge.com` : "www.curseforge.com";
+    this.baseUrl = `https://${host}/api`;
   }
 
-  /** Issue a request with the X-Api-Token header + User-Agent. On HTTP 403,
-   *  retry once with the token passed as a ?token= query param (defensive). */
+  /** Issue a request authenticated with the X-Api-Token header. The token is
+   *  never placed in the URL/query string (it could be logged by proxies/servers). */
   private async request(url: string, init: RequestInit): Promise<Response> {
     const headers: Record<string, string> = {
       ...(init.headers as Record<string, string> | undefined),
       "X-Api-Token": this.token,
       "User-Agent": getUserAgent(),
     };
-
-    let res = await fetch(url, { ...init, headers });
-    if (res.status === 403) {
-      const sep = url.includes("?") ? "&" : "?";
-      const retryUrl = `${url}${sep}token=${encodeURIComponent(this.token)}`;
-      res = await fetch(retryUrl, { ...init, headers });
-    }
-    return res;
+    return fetch(url, { ...init, headers });
   }
 
   async getGameVersions(): Promise<
