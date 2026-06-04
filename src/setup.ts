@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CookieExtractor } from "./clients/cookie-extractor.js";
@@ -26,14 +26,22 @@ function openUrl(url: string): void {
   console.error(`  → ${url}`);
   console.error("");
 
-  const cmd =
-    process.platform === "darwin"
-      ? "open"
-      : process.platform === "win32"
-        ? "start"
-        : "xdg-open";
+  // Open the default browser, passing the URL as a separate argv element (no shell
+  // string). On Windows the URL must go through `cmd /c start "" "<url>"`: `start`
+  // treats the first quoted token as the window TITLE, so the empty "" title is
+  // required — otherwise an empty console window opens and the browser does not.
   try {
-    execSync(`${cmd} "${url}"`, { stdio: "ignore", timeout: 5000 });
+    if (process.platform === "darwin") {
+      execFileSync("open", [url], { stdio: "ignore", timeout: 5000 });
+    } else if (process.platform === "win32") {
+      execFileSync("cmd", ["/c", "start", "", url], {
+        stdio: "ignore",
+        timeout: 5000,
+        windowsHide: true,
+      });
+    } else {
+      execFileSync("xdg-open", [url], { stdio: "ignore", timeout: 5000 });
+    }
   } catch {
     // Browser didn't open — URL is already printed above
   }
