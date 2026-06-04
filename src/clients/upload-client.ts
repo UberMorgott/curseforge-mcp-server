@@ -1,39 +1,77 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config.js";
-import type { WebClient } from "./web-client.js";
 import type { UploadMetadata } from "../utils/types.js";
-
-const BASE_URL = "https://www.curseforge.com";
+import { getUserAgent } from "../utils/helpers.js";
 
 export class UploadApiClient {
   private token: string;
-  private web: WebClient;
+  private baseUrl: string;
   private uploadDir: string;
 
-  constructor(config: Config, webClient: WebClient) {
+  constructor(config: Config) {
     if (!config.curseforgeAuthorToken) {
       throw new Error("CURSEFORGE_AUTHOR_TOKEN is required for Upload API");
     }
     this.token = config.curseforgeAuthorToken;
-    this.web = webClient;
     this.uploadDir = config.uploadDir;
+    // Validate the slug: it becomes the host of token-bearing requests, so reject
+    // anything that could redirect the token to another origin.
+    const slug = config.curseforgeGameSlug;
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      throw new Error(
+        `Invalid CURSEFORGE_GAME_SLUG "${slug}" — must match [a-z0-9-] (e.g. "minecraft", "hytale").`,
+      );
+    }
+    this.baseUrl = `https://${slug}.curseforge.com/api`;
+  }
+
+  /** Issue a request with the X-Api-Token header + User-Agent. On HTTP 403,
+   *  retry once with the token passed as a ?token= query param (defensive). */
+  private async request(url: string, init: RequestInit): Promise<Response> {
+    const headers: Record<string, string> = {
+      ...(init.headers as Record<string, string> | undefined),
+      "X-Api-Token": this.token,
+      "User-Agent": getUserAgent(),
+    };
+
+    let res = await fetch(url, { ...init, headers });
+    if (res.status === 403) {
+      const sep = url.includes("?") ? "&" : "?";
+      const retryUrl = `${url}${sep}token=${encodeURIComponent(this.token)}`;
+      res = await fetch(retryUrl, { ...init, headers });
+    }
+    return res;
   }
 
   async getGameVersions(): Promise<
     Array<{ id: number; gameVersionTypeID: number; name: string; slug: string }>
   > {
-    return this.web.get(`${BASE_URL}/api/game/versions`, {
-      "X-Api-Token": this.token,
-    }) as any;
+    const res = await this.request(
+      `${this.baseUrl}/game/versions?cache=true`,
+      { method: "GET" },
+    );
+    if (!res.ok) {
+      throw new Error(`getGameVersions failed: HTTP ${res.status}`);
+    }
+    return res.json() as Promise<
+      Array<{ id: number; gameVersionTypeID: number; name: string; slug: string }>
+    >;
   }
 
   async getGameVersionTypes(): Promise<
     Array<{ id: number; name: string; slug: string }>
   > {
-    return this.web.get(`${BASE_URL}/api/game/version-types`, {
-      "X-Api-Token": this.token,
-    }) as any;
+    const res = await this.request(
+      `${this.baseUrl}/game/version-types?cache=true`,
+      { method: "GET" },
+    );
+    if (!res.ok) {
+      throw new Error(`getGameVersionTypes failed: HTTP ${res.status}`);
+    }
+    return res.json() as Promise<
+      Array<{ id: number; name: string; slug: string }>
+    >;
   }
 
   async uploadFile(
@@ -49,16 +87,36 @@ export class UploadApiClient {
       }
     }
 
-    const fileBuffer = readFileSync(resolved);
+    const buffer = readFileSync(resolved);
     const fileName = path.basename(resolved);
-    const fileBase64 = fileBuffer.toString("base64");
 
-    return this.web.uploadFile(
-      `${BASE_URL}/api/projects/${projectId}/upload-file`,
-      fileBase64,
-      fileName,
-      JSON.stringify(metadata),
-      { "X-Api-Token": this.token },
-    ) as any;
+    const fd = new FormData();
+    fd.append("metadata", JSON.stringify(metadata));
+    fd.append("file", new Blob([buffer]), fileName);
+
+    // No Content-Type header — fetch sets the multipart boundary itself.
+    const res = await this.request(
+      `${this.baseUrl}/projects/${projectId}/upload-file`,
+      { method: "POST", body: fd },
+    );
+
+    const text = await res.text();
+    let body: any;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = {};
+    }
+
+    if (!res.ok) {
+      if (body && (body.errorCode !== undefined || body.errorMessage)) {
+        throw new Error(
+          `upload-file failed (${body.errorCode}): ${body.errorMessage}`,
+        );
+      }
+      throw new Error(`upload-file failed: HTTP ${res.status} ${text.slice(0, 500)}`);
+    }
+
+    return { id: body.id };
   }
 }

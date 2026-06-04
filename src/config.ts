@@ -9,6 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env"), quiet: true });
 export interface Config {
   curseforgeApiKey: string;
   curseforgeAuthorToken: string;
+  curseforgeGameSlug: string; // game subdomain for the per-game upload API host
   uploadDir: string; // optional — if set, confines upload_file reads to this directory
   authDir: string;
   cookiesPath: string;
@@ -19,6 +20,7 @@ export function loadConfig(): Config {
   return {
     curseforgeApiKey: process.env.CURSEFORGE_API_KEY || "",
     curseforgeAuthorToken: process.env.CURSEFORGE_AUTHOR_TOKEN || "",
+    curseforgeGameSlug: process.env.CURSEFORGE_GAME_SLUG || "minecraft",
     uploadDir: process.env.CURSEFORGE_UPLOAD_DIR || "",
     authDir,
     cookiesPath: path.resolve(authDir, "cookies.json"),

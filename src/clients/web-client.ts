@@ -211,16 +211,6 @@ export class WebClient {
     return this.request(url, "DELETE", undefined, extraHeaders);
   }
 
-  async uploadFile(
-    url: string,
-    fileBase64: string,
-    fileName: string,
-    metadataJson: string,
-    extraHeaders?: Record<string, string>,
-  ): Promise<unknown> {
-    return this.browser.requestUpload(url, fileBase64, fileName, metadataJson, extraHeaders);
-  }
-
   async close(): Promise<void> {
     await this.browser.close();
   }
