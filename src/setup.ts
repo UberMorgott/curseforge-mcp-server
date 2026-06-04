@@ -187,11 +187,14 @@ async function stepCookies() {
   }
   console.error("");
 
-  // Ensure the bundled browser is installed (one-time download). If this fails we
-  // continue anyway — the launch below surfaces a clearer, actionable error.
-  console.error("  Preparing browser (one-time download if needed)...");
+  // Ensure the bundled browser is installed (one-time ~110MB download on first run;
+  // instant if already cached). Output is captured to hide playwright's noisy
+  // "run npm install" warning; on failure we continue — the launch below surfaces
+  // a clearer, actionable error.
+  console.error("  Preparing browser (one-time ~110MB download on first run; may take a minute)...");
   try {
-    execSync("npx patchright install chromium", { cwd: ROOT, stdio: "inherit" });
+    execSync("npx patchright install chromium", { cwd: ROOT, stdio: "pipe" });
+    console.error("  ✓ Browser ready.");
   } catch {
     console.error("  ⚠ Could not pre-install the bundled browser; will try launching anyway.");
   }
