@@ -9,6 +9,7 @@ const BASE_URL = "https://www.curseforge.com";
 export class UploadApiClient {
   private token: string;
   private web: WebClient;
+  private uploadDir: string;
 
   constructor(config: Config, webClient: WebClient) {
     if (!config.curseforgeAuthorToken) {
@@ -16,6 +17,7 @@ export class UploadApiClient {
     }
     this.token = config.curseforgeAuthorToken;
     this.web = webClient;
+    this.uploadDir = config.uploadDir;
   }
 
   async getGameVersions(): Promise<
@@ -39,8 +41,16 @@ export class UploadApiClient {
     filePath: string,
     metadata: UploadMetadata,
   ): Promise<{ id: number }> {
-    const fileBuffer = readFileSync(filePath);
-    const fileName = path.basename(filePath);
+    const resolved = path.resolve(filePath);
+    if (this.uploadDir) {
+      const root = path.resolve(this.uploadDir);
+      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+        throw new Error("file_path escapes CURSEFORGE_UPLOAD_DIR");
+      }
+    }
+
+    const fileBuffer = readFileSync(resolved);
+    const fileName = path.basename(resolved);
     const fileBase64 = fileBuffer.toString("base64");
 
     return this.web.uploadFile(

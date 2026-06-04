@@ -1,6 +1,6 @@
 import { createWriteStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -266,6 +266,7 @@ export function registerCoreApiTools(
           const file = await client.getModFile(mod_id, file_id);
           const downloadUrl: string | null = (file as any).downloadUrl ?? null;
           const fileName: string = (file as any).fileName ?? `${mod_id}-${file_id}`;
+          const safeName = basename(fileName);
 
           if (!downloadUrl) {
             return error(
@@ -274,7 +275,7 @@ export function registerCoreApiTools(
           }
 
           await mkdir(destination, { recursive: true });
-          const filePath = join(destination, fileName);
+          const filePath = join(destination, safeName);
 
           const response = await fetch(downloadUrl);
           if (!response.ok) {

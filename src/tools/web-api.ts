@@ -7,6 +7,10 @@ import { success, error } from "../utils/types.js";
 const CF_BASE = "https://www.curseforge.com";
 const AUTHORS_API = "https://authors.curseforge.com/_api";
 
+function isAllowedHost(hostname: string): boolean {
+  return hostname === "curseforge.com" || hostname.endsWith(".curseforge.com");
+}
+
 export function registerWebApiTools(
   server: McpServer,
   client: WebClient,
@@ -68,8 +72,8 @@ export function registerWebApiTools(
       description: "Read comments on a CurseForge project. Returns threaded comments with replies nested under parent comments. Comments without replies are marked [NO REPLIES].",
       inputSchema: {
         mod_id: z.number().describe("CurseForge mod/project ID"),
-        page: z.number().optional().default(1),
-        page_size: z.number().optional().default(20),
+        page: z.number().int().min(1).optional().default(1),
+        page_size: z.number().int().min(1).max(50).optional().default(20),
       },
       annotations: {
         readOnlyHint: true,
@@ -227,7 +231,7 @@ export function registerWebApiTools(
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },
@@ -235,6 +239,17 @@ export function registerWebApiTools(
     async ({ url, method, body }) => {
       try {
         const fullUrl = url.startsWith("http") ? url : `${CF_BASE}${url}`;
+        let parsed: URL;
+        try {
+          parsed = new URL(fullUrl);
+        } catch {
+          return error("cf_fetch_page: invalid URL");
+        }
+        if (!isAllowedHost(parsed.hostname)) {
+          return error(
+            "cf_fetch_page: host not allowed; only curseforge.com endpoints are permitted",
+          );
+        }
         let data: any;
         if (method === "POST") {
           data = await client.post(fullUrl, body ? JSON.parse(body) : undefined);

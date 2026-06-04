@@ -89,9 +89,7 @@ export function registerUploadApiTools(
       title: "Get Upload Game Versions",
       description:
         "Get available game versions for the upload form. Returns version IDs needed for upload_file.",
-      inputSchema: {
-        game_slug: z.string().optional().describe('Game slug (e.g. "hytale", "minecraft"). Currently unused — versions are global.'),
-      },
+      inputSchema: {},
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -117,9 +115,7 @@ export function registerUploadApiTools(
     {
       title: "Get Upload Version Types",
       description: "Get game version type categories for the upload form.",
-      inputSchema: {
-        game_slug: z.string().optional().describe('Game slug (e.g. "hytale", "minecraft"). Currently unused — types are global.'),
-      },
+      inputSchema: {},
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
