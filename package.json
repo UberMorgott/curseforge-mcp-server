@@ -1,6 +1,6 @@
 {
   "name": "curseforge-mcp-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Universal MCP server for CurseForge platform management — search mods, upload files, manage comments, analytics. Works with any game (Minecraft, Hytale, WoW, etc.).",
   "type": "module",
   "main": "./build/index.js",

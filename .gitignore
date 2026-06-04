@@ -3,5 +3,6 @@ build/
 .env
 .auth/
 .mcp.json
+.serena/
 audit-bugs.json
 AUDIT-REPORT.md
