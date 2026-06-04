@@ -2,7 +2,6 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { CookieEntry } from "../utils/types.js";
-import { openInDefaultBrowser } from "../utils/helpers.js";
 import { CookieExtractor } from "./cookie-extractor.js";
 import { BrowserClient } from "./browser-client.js";
 
@@ -101,12 +100,59 @@ export class WebClient {
         this.saveCookies();
         return `Extracted ${result.cookies.length} cookies from ${result.browser}`;
       }
-      return result.error || "No cookies found";
+      // @rookie-rs found nothing (e.g. App-Bound Encryption on Windows Chrome 127+).
+      // Fall back to the reliable in-browser login that works on any OS.
+      return await this.browserLogin();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[web-client] Auto-extract failed: ${msg}`);
       return `Auto-extraction failed: ${msg}`;
     }
+  }
+
+  /** Reliable cross-OS login: drive the dedicated persistent browser. Open the
+   *  CurseForge login page in it (visible), let the user sign in there, then read
+   *  the session cookies straight from the browser context. Because the profile is
+   *  persistent, the login survives across runs. */
+  private async browserLogin(): Promise<string> {
+    console.error(
+      "[web-client] Opening CurseForge login in the dedicated browser window — please log in there...",
+    );
+    try {
+      await this.browser.openLoginPage("https://www.curseforge.com/login");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return `Could not open the login browser: ${msg} (run: npx patchright install chromium)`;
+    }
+
+    const maxWait = 120_000;
+    const pollInterval = 3_000;
+    const start = Date.now();
+
+    while (Date.now() - start < maxWait) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+      const elapsed = Math.round((Date.now() - start) / 1000);
+
+      const cookies = await this.browser.getCookies();
+      const hasAuth = cookies.some(
+        (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
+      );
+      if (hasAuth) {
+        console.error(`[web-client] Login detected after ${elapsed}s! Applying cookies...`);
+        this.cookies = cookies;
+        this.browser.setCookies(cookies);
+        this.saveCookies();
+
+        // Reset latch so a future 401 (expired cookies) can re-trigger login
+        this.loginAttempted = false;
+
+        await this.browser.refreshPages();
+        return `Logged in, ${cookies.length} cookies saved`;
+      }
+      console.error(`[web-client] Waiting for login... (${elapsed}s)`);
+    }
+
+    return "Login timed out (2 min)";
   }
 
   private async request(
@@ -141,47 +187,8 @@ export class WebClient {
 
   private async loginFlow(): Promise<void> {
     this.loginAttempted = true;
-    const loginUrl = "https://www.curseforge.com/login";
-    console.error("[web-client] Login required. Opening login page in your default browser...");
-    openInDefaultBrowser(loginUrl);
-
-    // Poll for cookies every 3 seconds, up to 2 minutes
-    const maxWait = 120_000;
-    const pollInterval = 3_000;
-    const start = Date.now();
-
-    while (Date.now() - start < maxWait) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      const elapsed = Math.round((Date.now() - start) / 1000);
-
-      try {
-        const extractor = new CookieExtractor();
-        const result = await extractor.extractCookies();
-        if (result.cookies.length > 0) {
-          const hasAuth = result.cookies.some((c) =>
-            c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
-          );
-          if (hasAuth) {
-            console.error(`[web-client] Login detected after ${elapsed}s! Applying cookies...`);
-            this.cookies = result.cookies;
-            this.browser.setCookies(result.cookies);
-            this.saveCookies();
-
-            // Reset latch so a future 401 (expired cookies) can re-trigger login
-            this.loginAttempted = false;
-
-            // Refresh browser pages to pick up new auth cookies
-            await this.browser.refreshPages();
-            return;
-          }
-        }
-        console.error(`[web-client] Waiting for login... (${elapsed}s)`);
-      } catch {
-        // Cookie extraction failed — keep polling
-      }
-    }
-
-    console.error("[web-client] Login timeout (2 min). Auth-requiring tools may not work.");
+    const result = await this.browserLogin();
+    console.error(`[web-client] ${result}`);
   }
 
   async get(url: string, extraHeaders?: Record<string, string>): Promise<any> {

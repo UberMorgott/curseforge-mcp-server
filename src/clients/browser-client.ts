@@ -92,6 +92,43 @@ export class BrowserClient {
     console.error("[browser-client] Pages refreshed with new cookies");
   }
 
+  /** Read the live session cookies straight from this dedicated browser context.
+   *  Returns CurseForge cookies only, mapped to the minimal CookieEntry shape. */
+  async getCookies(): Promise<CookieEntry[]> {
+    await this.ensureInit();
+    if (!this.context) return [];
+    const all = await this.context.cookies();
+    return all
+      .filter((c) => c.domain.includes("curseforge.com"))
+      .map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path }));
+  }
+
+  /** Bring the dedicated browser window to the foreground (un-minimize it — init()
+   *  minimizes windows via CDP after the Cloudflare challenge) and navigate the main
+   *  page to the login URL so the user can sign in directly in this browser. */
+  async openLoginPage(url: string): Promise<void> {
+    await this.ensureInit();
+    if (!this.mainPage) {
+      throw new Error("Browser main page not initialized; cannot open login page");
+    }
+
+    // Restore the window from its minimized state so the user can see and use it.
+    // Mirrors init()'s single CDP setWindowBounds to "minimized" with a single
+    // setWindowBounds to "normal".
+    try {
+      const cdp = await this.mainPage.context().newCDPSession(this.mainPage);
+      const { windowId } = await cdp.send("Browser.getWindowForTarget");
+      await cdp.send("Browser.setWindowBounds", {
+        windowId,
+        bounds: { windowState: "normal" },
+      });
+    } catch {
+      // CDP restore not supported — the page will still load; continue
+    }
+
+    await this.navigateAndWaitForCf(this.mainPage, url);
+  }
+
   async close(): Promise<void> {
     this.clearIdleTimer();
     const b = this.browser;
