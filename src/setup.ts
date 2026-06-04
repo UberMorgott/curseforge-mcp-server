@@ -5,6 +5,8 @@ import { execSync, execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CookieExtractor } from "./clients/cookie-extractor.js";
+import { WebClient } from "./clients/web-client.js";
+import { loadConfig } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -166,25 +168,46 @@ async function stepCookies() {
     return;
   }
 
-  // Auto-extraction failed — guide user to log in
-  console.error("  ✗ No CurseForge cookies found in any browser.");
-  console.error("  Please log in to CurseForge in your browser:");
-  openUrl("https://www.curseforge.com");
-  await ask("  Press Enter after you've logged in... ");
+  // Auto-extraction found nothing — this is normal on Windows Chrome 127+, whose
+  // App-Bound Encryption blocks reading cookies out of the user's own profile.
+  // Fall back to a one-time interactive login in the dedicated bundled browser:
+  // it works on any OS, and the persistent profile remembers it for future runs.
+  console.error("  ✗ Automatic extraction found no CurseForge session.");
+  console.error("    (Normal on Windows Chrome 127+ due to App-Bound Encryption.)");
+  console.error("    A one-time login in a dedicated browser is the reliable cross-OS way.");
   console.error("");
 
-  // Retry extraction
-  console.error("  Retrying cookie extraction...");
-  const retry = await extractor.extractCookies();
-  if (retry.cookies.length > 0) {
-    if (!existsSync(AUTH_DIR)) {
-      mkdirSync(AUTH_DIR, { recursive: true });
-    }
-    writeFileSync(COOKIES_PATH, JSON.stringify(retry.cookies, null, 2));
-    console.error(`  ✓ ${retry.cookies.length} cookies extracted from ${retry.browser}`);
-  } else {
-    console.error("  ✗ Still no cookies. Web API tools (comments, analytics) will be unavailable.");
-    console.error("    You can use the cf_auto_extract_cookies tool later to retry.");
+  const yn = (await ask("  Log in once in a dedicated browser now? It's remembered for future runs. (Y/n): ")).toLowerCase();
+  if (yn.startsWith("n")) {
+    console.error("");
+    console.error("  Skipped. Web API tools (comments/settings/description) will be unavailable.");
+    console.error("  Enable them later with the cf_auto_extract_cookies / cf_set_cookies tools.");
+    console.error("");
+    return;
+  }
+  console.error("");
+
+  // Ensure the bundled browser is installed (one-time download). If this fails we
+  // continue anyway — the launch below surfaces a clearer, actionable error.
+  console.error("  Preparing browser (one-time download if needed)...");
+  try {
+    execSync("npx patchright install chromium", { cwd: ROOT, stdio: "inherit" });
+  } catch {
+    console.error("  ⚠ Could not pre-install the bundled browser; will try launching anyway.");
+  }
+  console.error("");
+
+  const web = new WebClient(loadConfig());
+  try {
+    console.error("  A browser window will open — log in to CurseForge (you can save the password). Capturing your session...");
+    const ok = await web.loginInteractive();
+    if (ok) console.error("  ✓ Logged in — session saved. Future runs are automatic.");
+    else console.error("  ✗ Login timed out. You can retry later with the cf_auto_extract_cookies tool, or cf_set_cookies.");
+  } catch (e) {
+    console.error("  ✗ Could not open the login browser: " + (e instanceof Error ? e.message : e));
+    console.error("    Run 'npx patchright install chromium', then retry, or use cf_set_cookies.");
+  } finally {
+    await web.close();
   }
   console.error("");
 }

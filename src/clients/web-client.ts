@@ -183,6 +183,34 @@ export class WebClient {
     console.error("[web-client] Login wait timed out (2 min).");
   }
 
+  /** Blocking interactive login for the setup wizard (NOT for MCP requests).
+   *  Opens the dedicated persistent browser at the CurseForge login page and waits
+   *  until the user signs in (an auth cookie appears) or the timeout elapses. Because
+   *  the profile is persistent, the captured session is remembered for future runs.
+   *  Lets browser.openLoginPage throw so the caller can show a patchright-install hint. */
+  async loginInteractive(timeoutMs = 180000): Promise<boolean> {
+    await this.browser.openLoginPage("https://www.curseforge.com/login");
+
+    const pollInterval = 3_000;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+      const cookies = await this.browser.getCookies();
+      const hasAuth = cookies.some(
+        (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
+      );
+      if (hasAuth) {
+        this.cookies = cookies;
+        this.browser.setCookies(cookies);
+        this.saveCookies();
+        console.error(`[setup] Login detected — ${cookies.length} cookies saved.`);
+        return true;
+      }
+      console.error(`[setup] waiting for login... (${Math.round((Date.now() - start) / 1000)}s)`);
+    }
+    return false;
+  }
+
   private async request(
     url: string,
     method: string,
