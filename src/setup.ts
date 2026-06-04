@@ -97,15 +97,24 @@ async function main() {
   // ── Save and summarize ──────────────────────────────────────────
   saveEnv(env);
   console.error("");
-  console.error("━━━ Building server... ━━━");
-  console.error("");
-  try {
-    execSync("npm run build", { cwd: ROOT, stdio: "inherit" });
+  // The package ships prebuilt (npm `prepare` runs tsc on install), and npx
+  // prunes devDependencies afterwards, so `tsc` is usually gone by now. Only
+  // build if the compiled entry is actually missing, and tolerate a missing tsc.
+  const builtEntry = path.join(ROOT, "build", "index.js");
+  if (existsSync(builtEntry)) {
+    console.error("━━━ Done! (server already built) ━━━");
+  } else {
+    console.error("━━━ Building server... ━━━");
     console.error("");
-    console.error("━━━ Done! ━━━");
-  } catch {
-    console.error("");
-    console.error("  ✗ Build failed. Run 'npm run build' manually to see errors.");
+    try {
+      execSync("npm run build", { cwd: ROOT, stdio: "inherit" });
+      console.error("");
+      console.error("━━━ Done! ━━━");
+    } catch {
+      console.error("");
+      console.error("  ⚠ Could not build (tsc not available in this context).");
+      console.error("    If the server fails to start, run 'npm run build' in the project dir.");
+    }
   }
   console.error("");
   printStatus(env);
