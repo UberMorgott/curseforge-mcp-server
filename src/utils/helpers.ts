@@ -1,5 +1,6 @@
 import { existsSync, accessSync, constants } from "node:fs";
 import { execSync, execFile } from "node:child_process";
+import { CurseForgeFileStatus, CurseForgeFileRelationType } from "curseforge-api";
 
 export function compact(data: unknown): string {
   return JSON.stringify(data);
@@ -176,7 +177,17 @@ export function formatFile(f: any): string {
   let line = `[${f.id}] ${f.displayName || f.fileName} (${rt}, ${fmtSize(f.fileLength || 0)})`;
   if (f.downloadCount) line += ` — ${fmtNum(f.downloadCount)} downloads`;
   if (f.fileDate) line += ` | ${fmtDate(f.fileDate)}`;
+  if (f.fileStatus !== undefined || f.isAvailable !== undefined) {
+    const status = CurseForgeFileStatus[f.fileStatus] ?? f.fileStatus ?? "?";
+    line += `\n  status: ${status}${f.isAvailable === false ? ", not available" : ""}`;
+  }
   if (versions) line += `\n  versions: ${versions}`;
+  if (f.dependencies?.length) {
+    const deps = f.dependencies.map(
+      (d: any) => `${CurseForgeFileRelationType[d.relationType] ?? d.relationType} ${d.modId}`,
+    );
+    line += `\n  deps: ${deps.join(", ")}`;
+  }
   if (f.downloadUrl) line += `\n  url: ${f.downloadUrl}`;
   return line;
 }
