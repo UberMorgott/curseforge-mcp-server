@@ -235,7 +235,7 @@ export function registerCoreApiTools(
       },
       async ({ mod_id, file_id }) => {
         try {
-          const url = await client.getModFileDownloadURL(mod_id, file_id);
+          const { url } = await client.resolveDownload(mod_id, file_id);
           return success(url);
         } catch (e) {
           return error(`get_download_url: ${e instanceof Error ? e.message : String(e)}`);
@@ -263,16 +263,8 @@ export function registerCoreApiTools(
       },
       async ({ mod_id, file_id, destination }) => {
         try {
-          const file = await client.getModFile(mod_id, file_id);
-          const downloadUrl: string | null = (file as any).downloadUrl ?? null;
-          const fileName: string = (file as any).fileName ?? `${mod_id}-${file_id}`;
-          const safeName = basename(fileName);
-
-          if (!downloadUrl) {
-            return error(
-              "This file does not allow direct downloads (mod author has restricted distribution). Use the CurseForge app instead.",
-            );
-          }
+          const { url: downloadUrl, fileName } = await client.resolveDownload(mod_id, file_id);
+          const safeName = basename(fileName || `${mod_id}-${file_id}`);
 
           await mkdir(destination, { recursive: true });
           const filePath = join(destination, safeName);

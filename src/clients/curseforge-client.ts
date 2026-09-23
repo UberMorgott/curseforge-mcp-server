@@ -126,8 +126,13 @@ export class CoreApiClient {
     return this.client.getModFileChangelog(modId, fileId);
   }
 
-  async getModFileDownloadURL(modId: number, fileId: number): Promise<string> {
-    return this.client.getModFileDownloadURL(modId, fileId);
+  // downloadUrl is null when the author disables 3rd-party distribution; the file is still
+  // served by the public CDN at /files/{id/1000}/{id%1000}/{fileName}.
+  async resolveDownload(modId: number, fileId: number): Promise<{ url: string; fileName: string }> {
+    const file = await this.client.getModFile(modId, fileId);
+    const url = file.downloadUrl
+      ?? `https://mediafilez.forgecdn.net/files/${Math.floor(fileId / 1000)}/${fileId % 1000}/${encodeURIComponent(file.fileName)}`;
+    return { url, fileName: file.fileName };
   }
 
   async getModFile(modId: number, fileId: number) {
