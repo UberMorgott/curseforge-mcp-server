@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig } from "./config.js";
 import { CoreApiClient } from "./clients/curseforge-client.js";
@@ -7,6 +8,9 @@ import { WebClient } from "./clients/web-client.js";
 import { registerCoreApiTools } from "./tools/core-api.js";
 import { registerUploadApiTools } from "./tools/upload-api.js";
 import { registerWebApiTools } from "./tools/web-api.js";
+
+// package.json sits one level above both src/ and build/.
+const { version: PKG_VERSION } = createRequire(import.meta.url)("../package.json") as { version: string };
 
 // Sent to MCP clients on initialize so agents know the workflows without trial and error.
 function buildInstructions(defaultGameSlug: string): string {
@@ -28,7 +32,7 @@ export async function createServer(): Promise<{ server: McpServer; webClient: We
   const server = new McpServer(
     {
       name: "curseforge-mcp",
-      version: "0.2.0",
+      version: PKG_VERSION,
     },
     { instructions: buildInstructions(config.curseforgeGameSlug) },
   );
