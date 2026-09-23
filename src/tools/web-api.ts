@@ -81,11 +81,10 @@ export function registerWebApiTools(
     "get_comments",
     {
       title: "Get Project Comments",
-      description: "Read comments on a CurseForge project. Returns threaded comments with replies nested under parent comments. Comments without replies are marked [NO REPLIES].",
+      description: "Read comments on a CurseForge project, newest first. Returns threaded comments with replies nested under parent comments. Comments without replies are marked [NO REPLIES]. Fixed page size of 20 entries (replies count); use `page` to go further.",
       inputSchema: {
         mod_id: z.number().describe("CurseForge mod/project ID"),
-        page: z.number().int().min(1).optional().default(1),
-        page_size: z.number().int().min(1).max(50).optional().default(20),
+        page: z.number().int().min(1).optional().default(1).describe("1-based page number"),
       },
       annotations: {
         readOnlyHint: true,
@@ -94,18 +93,19 @@ export function registerWebApiTools(
         openWorldHint: true,
       },
     },
-    async ({ mod_id, page, page_size }) => {
+    async ({ mod_id, page }) => {
       if (!client.hasCookies()) return error("No session cookies. Use cf_auto_extract_cookies first.");
       try {
-        const index = (page - 1) * page_size;
+        // The endpoint only honors a 0-based `page`; index/pageSize are ignored and size is fixed.
         const data = await client.get(
-          `${CF_BASE}/api/v1/mods/${mod_id}/comments?index=${index}&pageSize=${page_size}`,
+          `${CF_BASE}/api/v1/mods/${mod_id}/comments?page=${page - 1}`,
         );
         const comments = data.data || [];
         const threads = comments.map((c: any) => formatCommentThread(c));
         const unanswered = comments.filter((c: any) => !c.replies?.length).length;
-        const total = data.pagination?.totalCount || "?";
-        return success(`${total} comments (page ${page}), ${unanswered} unanswered:\n\n${threads.join("\n\n")}`);
+        const total = data.pagination?.totalCount;
+        const pages = total ? Math.ceil(total / (data.pagination?.pageSize || 20)) : "?";
+        return success(`${total ?? "?"} comments (page ${page}/${pages}), ${unanswered} unanswered:\n\n${threads.join("\n\n")}`);
       } catch (e) {
         return error(`get_comments: ${e instanceof Error ? e.message : String(e)}`);
       }
