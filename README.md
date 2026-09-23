@@ -153,8 +153,8 @@ All credentials are optional. The server works in three tiers:
 | Tool | Description |
 |------|-------------|
 | `upload_file` | Upload a mod file to a project |
-| `get_upload_game_versions` | Get version IDs for upload form |
-| `get_upload_game_version_types` | Get version type categories |
+| `get_upload_game_versions` | Get version IDs for upload form (`game_slug`, e.g. `hytale`; defaults to `CURSEFORGE_GAME_SLUG`) |
+| `get_upload_game_version_types` | Get version type categories for a game (`game_slug`; needs `CURSEFORGE_API_KEY`) |
 
 ### Web API (8) — requires a browser + session cookies (unofficial workaround)
 
@@ -177,7 +177,7 @@ These tools have no official CurseForge API. They use a real browser (patchright
 |----------|----------|-------------|
 | `CURSEFORGE_API_KEY` | No | Core API key from [console.curseforge.com](https://console.curseforge.com/) |
 | `CURSEFORGE_AUTHOR_TOKEN` | No | Author token for file uploads |
-| `CURSEFORGE_GAME_SLUG` | No | Optional override for the upload API host subdomain. **Leave empty** (the default) — uploads then use the universal `https://www.curseforge.com/api` host, which is context-aware to your author token's game and works for every game (including newer ones like Hytale, which has no dedicated subdomain). Only set a slug (e.g. `minecraft`) for the rare game that responds *only* on its own subdomain; setting it for a game without one (e.g. `hytale`) would 404. |
+| `CURSEFORGE_GAME_SLUG` | No | Default game slug (e.g. `hytale`, `minecraft`) for `get_upload_game_versions` / `get_upload_game_version_types` when `game_slug` is not passed. Not a host — uploads always use the universal `https://www.curseforge.com/api`. |
 | `CURSEFORGE_UPLOAD_DIR` | No | If set, confines `upload_file` reads to this directory |
 
 ## How it works
@@ -186,10 +186,10 @@ The server uses four API layers:
 
 1. **Core API** — Full mod data via `curseforge-api` npm package (direct HTTP). Official CurseForge API.
 2. **CFWidget** — Project/author lookup, zero-config fallback (direct HTTP)
-3. **Upload API** — File uploads via CurseForge's official Upload API (direct HTTPS, no browser). Posts to `https://www.curseforge.com/api/projects/{id}/upload-file` with an `X-Api-Token` header (the token is never placed in the URL). The `www` host is universal and context-aware to your author token's game, so the same host works for every game — Minecraft, WoW, Hytale, and any newer game — with no per-game configuration. `CURSEFORGE_GAME_SLUG` is an optional override of this host (see Environment Variables) and should normally be left empty.
+3. **Upload API** — File uploads via CurseForge's official Upload API (direct HTTPS, no browser). Posts to `https://www.curseforge.com/api/projects/{id}/upload-file` with an `X-Api-Token` header (the token is never placed in the URL). The `www` host is universal and context-aware to your author token's game, so the same host works for every game — Minecraft, WoW, Hytale, and any newer game — with no per-game configuration. Game versions are per game (`/api/game/{slug}/versions`); version types come from the Core API.
 4. **Web API** — Comments, description editing, project settings via a real browser (unofficial workaround)
 
-> **Any game, including Hytale.** Reading works via the Core API (Hytale is an approved game, `gameId` 70216, slug `hytale`) and uploading works via the universal `www` host — both with no game-specific configuration. Just leave `CURSEFORGE_GAME_SLUG` empty.
+> **Any game, including Hytale.** Reading works via the Core API (Hytale is an approved game, `gameId` 70216, slug `hytale`) and uploading works via the universal `www` host — both with no game-specific host configuration. Pass `game_slug: "hytale"` (or set `CURSEFORGE_GAME_SLUG=hytale`) when listing upload game versions.
 
 ### Why a browser for the Web tier?
 

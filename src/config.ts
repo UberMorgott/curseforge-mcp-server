@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env"), quiet: true });
 export interface Config {
   curseforgeApiKey: string;
   curseforgeAuthorToken: string;
-  curseforgeGameSlug: string; // optional upload-host subdomain override; empty = www.curseforge.com (universal)
+  curseforgeGameSlug: string; // optional default game slug for upload version lookups (host is always www.curseforge.com)
   uploadDir: string; // optional — if set, confines upload_file reads to this directory
   authDir: string;
   cookiesPath: string;
