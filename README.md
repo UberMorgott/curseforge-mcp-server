@@ -2,7 +2,7 @@
 
 Universal MCP server for full CurseForge platform management. Search mods, upload files, manage comments, edit descriptions — works with any game (Minecraft, Hytale, WoW, etc.).
 
-25 tools across 4 API layers. Zero-config mode available — just have CurseForge open in your browser.
+26 tools across 4 API layers. Zero-config mode available — just have CurseForge open in your browser.
 
 ## Requirements
 
@@ -122,7 +122,7 @@ All credentials are optional. The server works in three tiers:
 - **Author Token**: Get from [curseforge.com/account/api-tokens](https://www.curseforge.com/account/api-tokens)
 - **Session cookies**: Auto-extracted from your browser, or set manually via the `cf_set_cookies` tool
 
-## Tools (25)
+## Tools (26)
 
 ### Core API (12) — requires API key
 
@@ -156,7 +156,7 @@ All credentials are optional. The server works in three tiers:
 | `get_upload_game_versions` | Get version IDs for upload form (`game_slug`, e.g. `hytale`; defaults to `CURSEFORGE_GAME_SLUG`) |
 | `get_upload_game_version_types` | Get version type categories for a game (`game_slug`; needs `CURSEFORGE_API_KEY`) |
 
-### Web API (8) — requires a browser + session cookies (unofficial workaround)
+### Web API (9) — requires a browser + session cookies (unofficial workaround)
 
 These tools have no official CurseForge API. They use a real browser (patchright's bundled Chromium, or your system Chrome as fallback) to bypass Cloudflare protection on curseforge.com. The browser launches automatically on first use (minimized window) and stays running for the session. This is an unofficial workaround and may break if CurseForge changes their site.
 
@@ -169,6 +169,7 @@ These tools have no official CurseForge API. They use a real browser (patchright
 | `delete_comment` | Delete a comment |
 | `get_project_settings` | Get project settings/metadata via Authors API |
 | `update_project_description` | Update project description (HTML) |
+| `update_project_links` | Update project Source link (GitHub/Bitbucket/other URL) |
 | `cf_fetch_page` | Raw request to any CurseForge API endpoint |
 
 ## Environment Variables

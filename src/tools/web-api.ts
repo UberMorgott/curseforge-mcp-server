@@ -7,6 +7,18 @@ import { success, error } from "../utils/types.js";
 const CF_BASE = "https://www.curseforge.com";
 const AUTHORS_API = "https://authors.curseforge.com/_api";
 
+// Authors console source host enum (main bundle): None=1, Bitbucket=2, Github=3, Other=4, Curseforge=5.
+const SOURCE_HOSTS: Record<number, string> = { 1: "None", 2: "Bitbucket", 3: "Github", 4: "Other", 5: "Curseforge" };
+const LINK_FIELDS = ["sourceHost", "sourceHostUrl"];
+
+function sourceHostFor(url: string): number {
+  if (!url) return 1;
+  const host = new URL(url).hostname.toLowerCase();
+  if (host === "github.com" || host === "www.github.com") return 3;
+  if (host === "bitbucket.org" || host === "www.bitbucket.org") return 2;
+  return 4;
+}
+
 function isAllowedHost(hostname: string): boolean {
   return hostname === "curseforge.com" || hostname.endsWith(".curseforge.com");
 }
@@ -214,6 +226,59 @@ export function registerWebApiTools(
         return success("Description updated.");
       } catch (e) {
         return error(`update_project_description: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "update_project_links",
+    {
+      title: "Update Project Links",
+      description:
+        "Update a project's Source link (authors console → Settings → Source). Reads the current source settings, " +
+        "changes only the source host/URL, saves, then re-reads and reports before/after. Empty source_url removes the link. " +
+        "Host auto-detected from the URL (GitHub, Bitbucket, else Other). Core API links.sourceUrl may lag behind (cache).",
+      inputSchema: {
+        project_id: z.number().describe("CurseForge project ID"),
+        source_url: z.string().describe("New source repository URL, or \"\" to remove the source link"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ project_id, source_url }) => {
+      if (!client.hasCookies()) return error("No session cookies. Use cf_auto_extract_cookies first.");
+      try {
+        const url = source_url.trim();
+        if (url && !/^https?:\/\//i.test(url)) return error("update_project_links: source_url must be an http(s) URL");
+        const host = sourceHostFor(url);
+        const sourceApi = `${AUTHORS_API}/project-source/source/${project_id}`;
+
+        const before = await client.get(sourceApi);
+        // Same payload the authors console Source tab PUTs; unchanged fields are sent back as read.
+        await client.put(`${AUTHORS_API}/project-source/${project_id}/update`, {
+          sourceHost: host,
+          sourceHostUrl: url || null,
+          packagerMode: before.packagerMode,
+        });
+        const after = await client.get(sourceApi);
+
+        const changed = Object.keys({ ...before, ...after }).filter(
+          (k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]),
+        );
+        const unexpected = changed.filter((k) => !LINK_FIELDS.includes(k));
+        const fmt = (s: any) => `${SOURCE_HOSTS[s.sourceHost] ?? s.sourceHost} ${s.sourceHostUrl ?? "(none)"}`;
+        let text = `Source link: ${fmt(before)} → ${fmt(after)}`;
+        if (after.sourceHostUrl !== (url || null)) {
+          return error(`${text}\nupdate_project_links: saved value does not match requested URL`);
+        }
+        if (unexpected.length) text += `\nWARNING: other source fields changed: ${unexpected.join(", ")}`;
+        return success(text);
+      } catch (e) {
+        return error(`update_project_links: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
   );

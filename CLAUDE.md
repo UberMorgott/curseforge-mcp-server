@@ -2,7 +2,7 @@
 
 ## Overview
 Universal MCP server, full CurseForge platform management — any game (Minecraft, Hytale, WoW, etc.).
-25 tools: search mods, download/upload files, manage comments, project settings.
+26 tools: search mods, download/upload files, manage comments, project settings.
 Zero-config: auto-extracts browser cookies; CFWidget tools work without API key.
 
 ## Build & Run
@@ -43,7 +43,7 @@ All credentials optional, stored in `.env`:
 - `CURSEFORGE_UPLOAD_DIR` — optional; if set, confines `upload_file` reads to this directory
 - `.auth/cookies.json` — Web API session cookies (auto-extracted from browser on startup)
 
-## Tools (25 total)
+## Tools (26 total)
 
 **Core API (12)** — needs API key:
 `search_mods`, `get_mod`, `get_mod_files`, `get_mod_file`, `get_mod_description`, `get_mod_changelog`, `get_download_url`, `download_mod`, `get_featured_mods`, `get_mods_batch`, `get_categories`, `get_game_versions`
@@ -54,8 +54,8 @@ All credentials optional, stored in `.env`:
 **Upload API (3)** — needs author token:
 `upload_file`, `get_upload_game_versions`, `get_upload_game_version_types`
 
-**Web API (8)** — unofficial browser workaround; needs session cookies (auto-extracted) + browser:
-`cf_set_cookies`, `cf_auto_extract_cookies`, `get_comments`, `post_comment`, `delete_comment`, `get_project_settings`, `update_project_description`, `cf_fetch_page`
+**Web API (9)** — unofficial browser workaround; needs session cookies (auto-extracted) + browser:
+`cf_set_cookies`, `cf_auto_extract_cookies`, `get_comments`, `post_comment`, `delete_comment`, `get_project_settings`, `update_project_description`, `update_project_links`, `cf_fetch_page`
 
 ## Key Conventions
 

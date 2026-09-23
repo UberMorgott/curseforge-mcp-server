@@ -306,11 +306,11 @@ function printStatus(env: Record<string, string>) {
     `  ${tokenOk ? "✓" : "✗"} Author Token  → upload mod files`,
   );
 
-  // CFWidget (2) always + cookies web tools (8) + api key core tools (12) + author upload (3)
+  // CFWidget (2) always + cookies web tools (9) + api key core tools (12) + author upload (3)
   const toolCount =
-    2 + (cookiesOk ? 8 : 0) + (apiKeyOk ? 12 : 0) + (tokenOk ? 3 : 0);
+    2 + (cookiesOk ? 9 : 0) + (apiKeyOk ? 12 : 0) + (tokenOk ? 3 : 0);
   console.error("");
-  console.error(`  Tools available: ${toolCount}/25`);
+  console.error(`  Tools available: ${toolCount}/26`);
 }
 
 main().catch((err) => {

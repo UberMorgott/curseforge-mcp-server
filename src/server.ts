@@ -21,7 +21,7 @@ function buildInstructions(defaultGameSlug: string): string {
     "Project IDs: numeric everywhere (mod_id / project_id). get_project also accepts a path like \"hytale/mods/<slug>\".",
     "Upload workflow: 1) get_upload_game_versions(game_slug) → version IDs; 2) upload_file(project_id, file_path, game_version_ids, release_type, changelog). upload_file publishes immediately.",
     "Version IDs are per game: never reuse IDs from another game's list.",
-    "Comments: get_comments(mod_id) → post_comment / delete_comment. Description: update_project_description. Project metadata: get_project_settings(project_id).",
+    "Comments: get_comments(mod_id) → post_comment / delete_comment. Description: update_project_description. Source link: update_project_links(project_id, source_url). Project metadata: get_project_settings(project_id).",
     "Web API tools (unofficial) run through a dedicated browser (first call ~5 s to pass Cloudflare). Auth errors → cf_auto_extract_cookies (extracts cookies or opens a login window; retry after signing in), or cf_set_cookies to paste cookies manually.",
   ].join("\n");
 }
