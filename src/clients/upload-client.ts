@@ -4,10 +4,16 @@ import type { Config } from "../config.js";
 import type { UploadMetadata } from "../utils/types.js";
 import { getUserAgent } from "../utils/helpers.js";
 
+// www.curseforge.com is the universal upload host and works for every game
+// (per-game subdomains like hytale.curseforge.com 301/404).
+const BASE_URL = "https://www.curseforge.com/api";
+const SLUG_RE = /^[a-z0-9-]+$/;
+
 export class UploadApiClient {
   private token: string;
-  private baseUrl: string;
+  private baseUrl = BASE_URL;
   private uploadDir: string;
+  private defaultGameSlug: string;
 
   constructor(config: Config) {
     if (!config.curseforgeAuthorToken) {
@@ -15,19 +21,14 @@ export class UploadApiClient {
     }
     this.token = config.curseforgeAuthorToken;
     this.uploadDir = config.uploadDir;
-    // Host: www.curseforge.com is the universal upload host and works for every
-    // game (including new ones like Hytale that have no dedicated subdomain).
-    // CURSEFORGE_GAME_SLUG is an optional override for the rare game that only
-    // responds on its own subdomain; leave it empty unless you know you need it.
-    // Validate any override since it forms the host of token-bearing requests.
+    // CURSEFORGE_GAME_SLUG = default game for version lookups (not a host).
     const slug = config.curseforgeGameSlug;
-    if (slug && !/^[a-z0-9-]+$/.test(slug)) {
+    if (slug && !SLUG_RE.test(slug)) {
       throw new Error(
-        `Invalid CURSEFORGE_GAME_SLUG "${slug}" — must match [a-z0-9-] (e.g. "minecraft"). Leave empty to use www.curseforge.com.`,
+        `Invalid CURSEFORGE_GAME_SLUG "${slug}" — must match [a-z0-9-] (e.g. "hytale", "minecraft").`,
       );
     }
-    const host = slug && slug !== "www" ? `${slug}.curseforge.com` : "www.curseforge.com";
-    this.baseUrl = `https://${host}/api`;
+    this.defaultGameSlug = slug;
   }
 
   /** Issue a request authenticated with the X-Api-Token header. The token is
@@ -41,11 +42,25 @@ export class UploadApiClient {
     return fetch(url, { ...init, headers });
   }
 
-  async getGameVersions(): Promise<
+  // Unscoped /api/game/versions returns an arbitrary game's data (7 Days to Die),
+  // so a game slug is mandatory.
+  private resolveSlug(gameSlug?: string): string {
+    const slug = gameSlug || this.defaultGameSlug;
+    if (!slug) {
+      throw new Error('game_slug is required (e.g. "hytale", "minecraft"), or set CURSEFORGE_GAME_SLUG');
+    }
+    if (!SLUG_RE.test(slug)) {
+      throw new Error(`Invalid game_slug "${slug}" — must match [a-z0-9-]`);
+    }
+    return slug;
+  }
+
+  async getGameVersions(gameSlug?: string): Promise<
     Array<{ id: number; gameVersionTypeID: number; name: string; slug: string }>
   > {
+    const slug = this.resolveSlug(gameSlug);
     const res = await this.request(
-      `${this.baseUrl}/game/versions?cache=true`,
+      `${this.baseUrl}/game/${slug}/versions?cache=true`,
       { method: "GET" },
     );
     if (!res.ok) {

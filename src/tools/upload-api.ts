@@ -89,7 +89,9 @@ export function registerUploadApiTools(
       title: "Get Upload Game Versions",
       description:
         "Get available game versions for the upload form. Returns version IDs needed for upload_file.",
-      inputSchema: {},
+      inputSchema: {
+        game_slug: z.string().optional().describe('Game slug (e.g. "hytale", "minecraft"). Defaults to CURSEFORGE_GAME_SLUG.'),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -97,9 +99,9 @@ export function registerUploadApiTools(
         openWorldHint: true,
       },
     },
-    async () => {
+    async ({ game_slug }) => {
       try {
-        const versions = await client.getGameVersions();
+        const versions = await client.getGameVersions(game_slug);
         const lines = versions.map(
           (v) => `[${v.id}] ${v.name} (type: ${v.gameVersionTypeID})`,
         );
