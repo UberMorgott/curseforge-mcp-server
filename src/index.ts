@@ -21,6 +21,8 @@ if (process.argv.includes("--setup")) {
 
       process.on("SIGINT", shutdown);
       process.on("SIGTERM", shutdown);
+      // Client gone (stdin closed): close Chrome and remove any per-process profile.
+      process.stdin.on("end", shutdown);
     },
   ).catch((err) => {
     console.error("[curseforge-mcp] Fatal error:", err);

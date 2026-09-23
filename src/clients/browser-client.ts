@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdirSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readdirSync, readlinkSync, rmSync } from "node:fs";
 import type { BrowserContext, Page } from "patchright";
 import type { CookieEntry } from "../utils/types.js";
 import { detectChromeExecutable } from "../utils/helpers.js";
@@ -26,6 +26,8 @@ export class BrowserClient {
   private cookies: CookieEntry[] = [];
   private initPromise: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Per-process profile in use (shared one was locked); deleted on close. */
+  private tempProfileDir: string | null = null;
 
   setCookies(cookies: CookieEntry[]): void {
     this.cookies = cookies;
@@ -118,6 +120,13 @@ export class BrowserClient {
       console.error("[browser-client] Closing Chrome");
       await ctx.close().catch(() => {});
     }
+    this.removeTempProfile();
+  }
+
+  private removeTempProfile(): void {
+    const dir = this.tempProfileDir;
+    this.tempProfileDir = null;
+    if (dir) removeDir(dir);
   }
 
   private async evaluateWithTimeout(
@@ -189,11 +198,10 @@ export class BrowserClient {
       );
     }
 
-    // Dedicated, persistent profile (this file has no Config dependency).
-    // A stable userDataDir keeps the logged-in CurseForge session across runs and
-    // isolates it from the user's own Chrome profile, so the two can coexist.
-    const userDataDir = path.join(os.homedir(), ".curseforge-mcp", "chrome-profile");
-    mkdirSync(userDataDir, { recursive: true });
+    // Dedicated profile, isolated from the user's own Chrome (this file has no Config
+    // dependency): the shared persistent one, or a per-process one if another server holds it.
+    const userDataDir = pickProfileDir();
+    this.tempProfileDir = userDataDir === SHARED_PROFILE_DIR ? null : userDataDir;
 
     // patchright patches out automation flags (--enable-automation, navigator.webdriver, etc.)
     // Use launchPersistentContext for maximum stealth.
@@ -209,7 +217,24 @@ export class BrowserClient {
     //   2. System Chrome (executablePath): fallback when the bundled browser isn't installed.
     //      Reuses the SAME dedicated userDataDir for session persistence. Can still fail if
     //      the user's own Chrome is already running off a shared install.
-    const context = await this.launchContext(chromium, userDataDir, visible);
+    let context: BrowserContext;
+    try {
+      context = await this.launchContext(chromium, userDataDir, visible);
+    } catch (err) {
+      this.removeTempProfile();
+      // Lost a launch race for the shared profile to another server process.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (userDataDir !== SHARED_PROFILE_DIR || !msg.includes("has been closed")) throw err;
+      const dir = createTempProfileDir();
+      console.error(`[browser-client] Shared profile busy, retrying with ${dir}`);
+      this.tempProfileDir = dir;
+      try {
+        context = await this.launchContext(chromium, dir, visible);
+      } catch (retryErr) {
+        this.removeTempProfile();
+        throw retryErr;
+      }
+    }
     this.context = context;
     try {
       const playwrightCookies = this.cookies.map(toPlaywrightCookie);
@@ -233,6 +258,7 @@ export class BrowserClient {
     } catch (err) {
       this.context = null;
       await context.close().catch(() => {});
+      this.removeTempProfile();
       throw err;
     }
 
@@ -355,6 +381,81 @@ export class BrowserClient {
     } catch {
       console.error(`[browser-client] Warning: page unstable after navigation for ${url}`);
     }
+  }
+}
+
+const PROFILE_ROOT = path.join(os.homedir(), ".curseforge-mcp");
+const SHARED_PROFILE_DIR = path.join(PROFILE_ROOT, "chrome-profile");
+const TEMP_PROFILE_RE = /^chrome-profile-(\d+)$/;
+
+/** Every MCP client session runs its own server process, but a Chrome profile can be
+ *  held by one browser only. Use the shared profile when free; otherwise a per-process
+ *  one. Auth does not depend on the profile: session cookies come from .auth/cookies.json
+ *  (injected on launch) and a login saves them back there. */
+function pickProfileDir(): string {
+  mkdirSync(SHARED_PROFILE_DIR, { recursive: true });
+  removeStaleTempProfiles();
+  if (!profileInUse(SHARED_PROFILE_DIR)) return SHARED_PROFILE_DIR;
+  const dir = createTempProfileDir();
+  console.error(`[browser-client] Shared profile in use by another process, using ${dir}`);
+  return dir;
+}
+
+function createTempProfileDir(): string {
+  const dir = path.join(PROFILE_ROOT, `chrome-profile-${process.pid}`);
+  removeDir(dir);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** Chrome holds `lockfile` open exclusively on Windows; elsewhere `SingletonLock` is a
+ *  symlink to "<host>-<pid>". */
+function profileInUse(dir: string): boolean {
+  if (process.platform === "win32") {
+    try {
+      closeSync(openSync(path.join(dir, "lockfile"), "r+"));
+      return false;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      return code === "EBUSY" || code === "EPERM";
+    }
+  }
+  try {
+    const pid = Number(/-(\d+)$/.exec(readlinkSync(path.join(dir, "SingletonLock")))?.[1]);
+    return pid > 0 && pidAlive(pid);
+  } catch {
+    return false;
+  }
+}
+
+/** Delete per-process profiles left behind by server processes that are gone. */
+function removeStaleTempProfiles(): void {
+  let names: string[];
+  try {
+    names = readdirSync(PROFILE_ROOT);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const pid = Number(TEMP_PROFILE_RE.exec(name)?.[1]);
+    if (pid && pid !== process.pid && !pidAlive(pid)) removeDir(path.join(PROFILE_ROOT, name));
+  }
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function removeDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (e) {
+    console.error(`[browser-client] Could not remove ${dir}: ${e instanceof Error ? e.message : e}`);
   }
 }
 
