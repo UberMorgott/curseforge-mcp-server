@@ -49,7 +49,7 @@ export async function createServer(): Promise<{ server: McpServer; webClient: We
   // Upload API tools — only if author token is provided (native HTTP, no browser)
   if (config.curseforgeAuthorToken) {
     try {
-      const uploadClient = new UploadApiClient(config);
+      const uploadClient = new UploadApiClient(config, coreClient);
       registerUploadApiTools(server, uploadClient);
       console.error("[curseforge-mcp] Upload API tools registered");
     } catch (e) {

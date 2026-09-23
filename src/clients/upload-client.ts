@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config.js";
+import type { CoreApiClient } from "./curseforge-client.js";
 import type { UploadMetadata } from "../utils/types.js";
 import { getUserAgent } from "../utils/helpers.js";
 
@@ -14,13 +15,15 @@ export class UploadApiClient {
   private baseUrl = BASE_URL;
   private uploadDir: string;
   private defaultGameSlug: string;
+  private core: CoreApiClient | null;
 
-  constructor(config: Config) {
+  constructor(config: Config, coreClient: CoreApiClient | null) {
     if (!config.curseforgeAuthorToken) {
       throw new Error("CURSEFORGE_AUTHOR_TOKEN is required for Upload API");
     }
     this.token = config.curseforgeAuthorToken;
     this.uploadDir = config.uploadDir;
+    this.core = coreClient;
     // CURSEFORGE_GAME_SLUG = default game for version lookups (not a host).
     const slug = config.curseforgeGameSlug;
     if (slug && !SLUG_RE.test(slug)) {
@@ -71,19 +74,14 @@ export class UploadApiClient {
     >;
   }
 
-  async getGameVersionTypes(): Promise<
+  // Upload API has no per-game version-types endpoint (/api/game/{slug}/version-types = 404),
+  // so per-game types come from Core API /v1/games/{gameId}/version-types.
+  async getGameVersionTypes(gameSlug?: string): Promise<
     Array<{ id: number; name: string; slug: string }>
   > {
-    const res = await this.request(
-      `${this.baseUrl}/game/version-types?cache=true`,
-      { method: "GET" },
-    );
-    if (!res.ok) {
-      throw new Error(`getGameVersionTypes failed: HTTP ${res.status}`);
-    }
-    return res.json() as Promise<
-      Array<{ id: number; name: string; slug: string }>
-    >;
+    const slug = this.resolveSlug(gameSlug);
+    if (!this.core) throw new Error("Version types require CURSEFORGE_API_KEY");
+    return this.core.getVersionTypesByGameSlug(slug);
   }
 
   async uploadFile(

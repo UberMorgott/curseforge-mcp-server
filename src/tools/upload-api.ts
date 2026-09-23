@@ -117,7 +117,9 @@ export function registerUploadApiTools(
     {
       title: "Get Upload Version Types",
       description: "Get game version type categories for the upload form.",
-      inputSchema: {},
+      inputSchema: {
+        game_slug: z.string().optional().describe('Game slug (e.g. "hytale", "minecraft"). Defaults to CURSEFORGE_GAME_SLUG; needs CURSEFORGE_API_KEY.'),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -125,9 +127,9 @@ export function registerUploadApiTools(
         openWorldHint: true,
       },
     },
-    async () => {
+    async ({ game_slug }) => {
       try {
-        const types = await client.getGameVersionTypes();
+        const types = await client.getGameVersionTypes(game_slug);
         const lines = types.map((t) => `[${t.id}] ${t.name} (${t.slug})`);
         return success(`${types.length} version types:\n${lines.join("\n")}`);
       } catch (e) {

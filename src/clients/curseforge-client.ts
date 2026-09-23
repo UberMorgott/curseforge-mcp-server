@@ -111,6 +111,13 @@ export class CoreApiClient {
     return this.client.getGames();
   }
 
+  async getVersionTypesByGameSlug(slug: string) {
+    const games = await this.client.getGames({ pageSize: 50 });
+    const game = games.data.find((g) => g.slug === slug);
+    if (!game) throw new Error(`Unknown game slug "${slug}"`);
+    return this.client.getVersionTypes(game.id);
+  }
+
   async getGame(gameId: number) {
     return this.client.getGame(gameId);
   }
