@@ -427,7 +427,7 @@ export function registerCoreApiTools(
       description:
         'Get CurseForge project info by numeric ID or path (e.g. "238222" or "minecraft/mc-mods/jei"). Works without API key via CFWidget.',
       inputSchema: {
-        project: z.string().describe('Project ID or path, e.g. "238222" or "minecraft/mc-mods/jei"'),
+        project: z.union([z.string(), z.number()]).describe('Project ID or path, e.g. "238222" or "minecraft/mc-mods/jei"'),
       },
       annotations: {
         readOnlyHint: true,
@@ -438,7 +438,7 @@ export function registerCoreApiTools(
     },
     async ({ project }) => {
       try {
-        const data = await cfwidget.getProject(project);
+        const data = await cfwidget.getProject(String(project));
         return success(formatProject(data));
       } catch (e) {
         return error(`get_project: ${e instanceof Error ? e.message : String(e)}`);

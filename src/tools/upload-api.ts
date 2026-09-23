@@ -13,7 +13,7 @@ export function registerUploadApiTools(
     {
       title: "Upload Mod File",
       description:
-        "Upload a mod file to a CurseForge project. Requires CURSEFORGE_AUTHOR_TOKEN.",
+        "Upload a mod file to a CurseForge project (publishes it). Requires CURSEFORGE_AUTHOR_TOKEN. First call get_upload_game_versions with the project's game_slug and pass the matching IDs in game_version_ids.",
       inputSchema: {
         project_id: z.number().describe("CurseForge project ID"),
         file_path: z.string().describe("Absolute path to the file to upload"),

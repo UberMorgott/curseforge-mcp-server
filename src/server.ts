@@ -8,13 +8,30 @@ import { registerCoreApiTools } from "./tools/core-api.js";
 import { registerUploadApiTools } from "./tools/upload-api.js";
 import { registerWebApiTools } from "./tools/web-api.js";
 
+// Sent to MCP clients on initialize so agents know the workflows without trial and error.
+function buildInstructions(defaultGameSlug: string): string {
+  return [
+    "CurseForge platform tools (any game).",
+    `Default game slug: ${defaultGameSlug || "(none — pass game_slug explicitly)"}.`,
+    "Game IDs for Core API tools (game_id): Minecraft=432, Hytale=70216, WoW=1. search_mods defaults to 432 — always pass game_id for other games. Unknown game → get_game_versions lists all games with IDs.",
+    "Project IDs: numeric everywhere (mod_id / project_id). get_project also accepts a path like \"hytale/mods/<slug>\".",
+    "Upload workflow: 1) get_upload_game_versions(game_slug) → version IDs; 2) upload_file(project_id, file_path, game_version_ids, release_type, changelog). upload_file publishes immediately.",
+    "Version IDs are per game: never reuse IDs from another game's list.",
+    "Comments: get_comments(mod_id) → post_comment / delete_comment. Description: update_project_description. Project metadata: get_project_settings(project_id).",
+    "Web API tools (unofficial) run through a dedicated browser (first call ~5 s to pass Cloudflare). Auth errors → cf_auto_extract_cookies (extracts cookies or opens a login window; retry after signing in), or cf_set_cookies to paste cookies manually.",
+  ].join("\n");
+}
+
 export async function createServer(): Promise<{ server: McpServer; webClient: WebClient }> {
   const config = loadConfig();
 
-  const server = new McpServer({
-    name: "curseforge-mcp",
-    version: "0.2.0",
-  });
+  const server = new McpServer(
+    {
+      name: "curseforge-mcp",
+      version: "0.2.0",
+    },
+    { instructions: buildInstructions(config.curseforgeGameSlug) },
+  );
 
   // CFWidget — always available, no API key needed
   const cfwidget = new CfWidgetClient();
