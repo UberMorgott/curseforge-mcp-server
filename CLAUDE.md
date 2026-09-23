@@ -22,7 +22,7 @@ Four API layers:
 3. **Upload API** (`src/clients/upload-client.ts`) — file uploads via official Upload API over native HTTPS (needs author token; no browser). POSTs to `https://www.curseforge.com/api/projects/{id}/upload-file` with `X-Api-Token` header (token never in URL). Host always `www` (works for every game incl. Hytale; `hytale.curseforge.com` 301/404). Game versions per game: `/api/game/{slug}/versions`; version types from Core API (needs API key).
 4. **Web API** (`src/clients/web-client.ts` → `browser-client.ts`) — comments, settings, description via real browser (bypasses Cloudflare). **Unofficial workaround** — no official API; may break if site changes.
 
-Web API uses `patchright` (optional dep, patched-Playwright stealth fork): launches real browser, runs fetch() inside. `BrowserClient` prefers patchright's **bundled Chromium**, falls back to **system Chrome** (`detectChromeExecutable`). `launchPersistentContext` with dedicated profile `~/.curseforge-mcp/chrome-profile` (session persists, isolated from user's Chrome). Lazy-launches on first Web API call, navigates to curseforge.com to pass CF challenge, minimizes window via CDP, reuses session. Core/CFWidget/Upload use native HTTP — no browser.
+Web API uses `patchright` (optional dep, patched-Playwright stealth fork): launches real browser, runs fetch() inside. `BrowserClient` prefers patchright's **bundled Chromium**, falls back to **system Chrome** (`detectChromeExecutable`). `launchPersistentContext` with dedicated profile `~/.curseforge-mcp/chrome-profile` (session persists, isolated from user's Chrome). Lazy-launches on first Web API call, runs **headless** (new headless mode, `channel: "chromium"`; no window/taskbar) with per-page CDP UA override stripping `HeadlessChrome` (CF blocks only that token), navigates to curseforge.com to pass CF challenge, reuses one context per process (idle 5 min → closed). Visible (headed) window ONLY for interactive login (`openLoginPage`: closes hidden context, relaunches headed on same profile; closed after login/timeout, next call relaunches hidden). `CURSEFORGE_BROWSER_VISIBLE=1` forces headed for debugging. Core/CFWidget/Upload use native HTTP — no browser.
 
 Tools registered in `src/tools/` files. Server assembly in `src/server.ts`.
 
@@ -41,6 +41,7 @@ All credentials optional, stored in `.env`:
 - `CURSEFORGE_AUTHOR_TOKEN` — author token for file uploads
 - `CURSEFORGE_GAME_SLUG` — optional default game slug (e.g. "hytale", "minecraft") for `get_upload_game_versions` / `get_upload_game_version_types` when `game_slug` omitted. Not a host — upload host always `www.curseforge.com`. Validated `[a-z0-9-]`.
 - `CURSEFORGE_UPLOAD_DIR` — optional; if set, confines `upload_file` reads to this directory
+- `CURSEFORGE_BROWSER_VISIBLE` — debug only; `1` shows the Web API browser window (default headless)
 - `.auth/cookies.json` — Web API session cookies (auto-extracted from browser on startup)
 
 ## Tools (26 total)

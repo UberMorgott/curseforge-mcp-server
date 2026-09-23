@@ -8,7 +8,7 @@ Universal MCP server for full CurseForge platform management. Search mods, uploa
 
 - **Node.js** >= 18
 - **Chrome or Chromium** — required **only** for the Web API tools (comments, settings, description), which bypass Cloudflare protection via a real browser. The Core API, CFWidget, and Upload tools are all native HTTP and never launch a browser. Recommended: install patchright's bundled Chromium with `npx patchright install chromium`; the server falls back to your system Chrome if the bundled browser isn't present.
-- **Desktop OS with display** (Windows, macOS, Linux with GUI) — for the Web tier only, the browser runs in headed mode (minimized window). On headless Linux servers (VPS, Docker) you must provide a display yourself, e.g. run under [`xvfb-run`](https://en.wikipedia.org/wiki/Xvfb) — `patchright` does **not** start xvfb automatically (see [Headless servers](#headless-servers-vps-docker)).
+- **Display only for login** — for the Web tier the browser runs headless (no window) during normal tool calls; a visible window opens only for the interactive CurseForge login. On headless Linux servers (VPS, Docker) you must provide a display yourself, e.g. run under [`xvfb-run`](https://en.wikipedia.org/wiki/Xvfb) — `patchright` does **not** start xvfb automatically (see [Headless servers](#headless-servers-vps-docker)).
 
 > **Note:** For the Web tier, the server launches a **separate, dedicated browser** with its own persistent profile at `~/.curseforge-mcp/chrome-profile` — it does not interfere with your running browser, and the two can run simultaneously. If you only use Core API, CFWidget, or Upload tools, no browser is ever launched.
 
@@ -180,6 +180,7 @@ These tools have no official CurseForge API. They use a real browser (patchright
 | `CURSEFORGE_AUTHOR_TOKEN` | No | Author token for file uploads |
 | `CURSEFORGE_GAME_SLUG` | No | Default game slug (e.g. `hytale`, `minecraft`) for `get_upload_game_versions` / `get_upload_game_version_types` when `game_slug` is not passed. Not a host — uploads always use the universal `https://www.curseforge.com/api`. |
 | `CURSEFORGE_UPLOAD_DIR` | No | If set, confines `upload_file` reads to this directory |
+| `CURSEFORGE_BROWSER_VISIBLE` | No | Debug only: `1` shows the Web API browser window (default: headless) |
 
 ## How it works
 
@@ -196,7 +197,7 @@ The server uses four API layers:
 
 CurseForge uses Cloudflare protection that blocks all automated HTTP requests (including curl, fetch, and even TLS-fingerprint-matched requests). CurseForge has no official API for comments, project settings, or description editing, so the only reliable way to reach those endpoints is through a real browser that can solve Cloudflare's JavaScript challenge. **This applies only to the Web tier** — the Core, CFWidget, and Upload tiers use plain HTTP and never touch a browser.
 
-The server uses [`patchright`](https://www.npmjs.com/package/patchright) — a patched fork of Playwright that strips automation fingerprints (`--enable-automation`, `navigator.webdriver`, etc.) for stealth. It prefers patchright's **bundled Chromium** (install once with `npx patchright install chromium`) and falls back to your **system Chrome** if the bundled browser isn't present. It runs against a dedicated **persistent profile** at `~/.curseforge-mcp/chrome-profile`, so the logged-in CurseForge session survives across runs and stays isolated from your own Chrome (both can run at the same time). The browser is launched headed (the window is minimized via CDP once the challenge is solved) and is only started when a Web API tool is first called; the session is reused for all subsequent requests. The Cloudflare challenge typically resolves within a few seconds.
+The server uses [`patchright`](https://www.npmjs.com/package/patchright) — a patched fork of Playwright that strips automation fingerprints (`--enable-automation`, `navigator.webdriver`, etc.) for stealth. It prefers patchright's **bundled Chromium** (install once with `npx patchright install chromium`) and falls back to your **system Chrome** if the bundled browser isn't present. It runs against a dedicated **persistent profile** at `~/.curseforge-mcp/chrome-profile`, so the logged-in CurseForge session survives across runs and stays isolated from your own Chrome (both can run at the same time). For normal tool calls the browser runs **headless** (no window, no taskbar entry; its `HeadlessChrome` user-agent token is replaced so Cloudflare accepts it), is only started when a Web API tool is first called, and is reused for all subsequent requests. A visible window opens only for the interactive login (`cf_auto_extract_cookies` fallback, setup wizard) and is closed once you have signed in. Set `CURSEFORGE_BROWSER_VISIBLE=1` to show the browser for debugging. The Cloudflare challenge typically resolves within a few seconds.
 
 Session cookies can be auto-extracted from your browser via `@rookie-rs/api` (supports 12+ browsers on Windows, macOS, and Linux) and injected into the browser instance for authenticated requests.
 
@@ -204,7 +205,7 @@ Session cookies can be auto-extracted from your browser via `@rookie-rs/api` (su
 
 ### Headless servers (VPS, Docker)
 
-Because the browser runs headed, a display is required for the Web API tools only. On Linux servers without a real display, install xvfb and run the server under a virtual one — **`patchright` does not start xvfb for you**, so this is a manual step:
+Normal Web API calls run headless and need no display. Only the interactive login opens a visible window, so on a server either copy cookies in via `cf_set_cookies` or provide a display for that one step. On Linux servers without a real display, install xvfb and run the server under a virtual one — **`patchright` does not start xvfb for you**, so this is a manual step:
 
 ```bash
 # Debian/Ubuntu

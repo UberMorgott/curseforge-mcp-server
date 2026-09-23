@@ -164,23 +164,30 @@ export class WebClient {
     const pollInterval = 3_000;
     const start = Date.now();
 
-    while (Date.now() - start < maxWait) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      const cookies = await this.browser.getCookies();
-      const hasAuth = cookies.some(
-        (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
-      );
-      if (hasAuth) {
-        this.cookies = cookies;
-        this.browser.setCookies(cookies);
-        this.saveCookies();
-        this.loginAttempted = false; // allow a future 401 to re-trigger login
-        await this.browser.refreshPages();
-        console.error(`[web-client] Login detected — ${cookies.length} cookies saved.`);
-        return;
+    try {
+      while (Date.now() - start < maxWait) {
+        await new Promise((r) => setTimeout(r, pollInterval));
+        const cookies = await this.browser.getCookies();
+        const hasAuth = cookies.some(
+          (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
+        );
+        if (hasAuth) {
+          this.cookies = cookies;
+          this.browser.setCookies(cookies);
+          this.saveCookies();
+          this.loginAttempted = false; // allow a future 401 to re-trigger login
+          console.error(`[web-client] Login detected — ${cookies.length} cookies saved.`);
+          return;
+        }
       }
+      console.error("[web-client] Login wait timed out (2 min).");
+    } catch (e) {
+      console.error(`[web-client] Login window lost: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      // Close the visible login window; the next request relaunches the hidden browser
+      // on the same persistent profile, so the new session carries over.
+      await this.browser.close();
     }
-    console.error("[web-client] Login wait timed out (2 min).");
   }
 
   /** Blocking interactive login for the setup wizard (NOT for MCP requests).
@@ -193,22 +200,27 @@ export class WebClient {
 
     const pollInterval = 3_000;
     const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      const cookies = await this.browser.getCookies();
-      const hasAuth = cookies.some(
-        (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
-      );
-      if (hasAuth) {
-        this.cookies = cookies;
-        this.browser.setCookies(cookies);
-        this.saveCookies();
-        console.error(`[setup] Login detected — ${cookies.length} cookies saved.`);
-        return true;
+    try {
+      while (Date.now() - start < timeoutMs) {
+        await new Promise((r) => setTimeout(r, pollInterval));
+        const cookies = await this.browser.getCookies();
+        const hasAuth = cookies.some(
+          (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
+        );
+        if (hasAuth) {
+          this.cookies = cookies;
+          this.browser.setCookies(cookies);
+          this.saveCookies();
+          console.error(`[setup] Login detected — ${cookies.length} cookies saved.`);
+          return true;
+        }
+        console.error(`[setup] waiting for login... (${Math.round((Date.now() - start) / 1000)}s)`);
       }
-      console.error(`[setup] waiting for login... (${Math.round((Date.now() - start) / 1000)}s)`);
+      return false;
+    } finally {
+      // Close the visible login window; later requests use the hidden browser.
+      await this.browser.close();
     }
-    return false;
   }
 
   private async request(

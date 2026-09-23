@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
-import type { Browser, BrowserContext, Page } from "patchright";
+import type { BrowserContext, Page } from "patchright";
 import type { CookieEntry } from "../utils/types.js";
 import { detectChromeExecutable } from "../utils/helpers.js";
 
@@ -18,7 +18,8 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const CF_WAIT_MS = 45_000;
 
 export class BrowserClient {
-  private browser: Browser | null = null;
+  /** Whether the current context was launched headed (interactive login). */
+  private visible = false;
   private context: BrowserContext | null = null;
   private mainPage: Page | null = null;
   private authorsPage: Page | null = null;
@@ -78,20 +79,6 @@ export class BrowserClient {
     return result.body;
   }
 
-  async refreshPages(): Promise<void> {
-    if (!this.context) return;
-    // Re-add cookies and reload pages to pick up new auth session
-    const mapped = this.cookies.map(toPlaywrightCookie);
-    if (mapped.length) await this.context.addCookies(mapped);
-    if (this.mainPage) {
-      await this.navigateAndWaitForCf(this.mainPage, "https://www.curseforge.com/");
-    }
-    if (this.authorsPage) {
-      await this.navigateAndWaitForCf(this.authorsPage, "https://authors.curseforge.com/");
-    }
-    console.error("[browser-client] Pages refreshed with new cookies");
-  }
-
   /** Read the live session cookies straight from this dedicated browser context.
    *  Returns CurseForge cookies only, mapped to the minimal CookieEntry shape. */
   async getCookies(): Promise<CookieEntry[]> {
@@ -103,43 +90,33 @@ export class BrowserClient {
       .map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path }));
   }
 
-  /** Bring the dedicated browser window to the foreground (un-minimize it — init()
-   *  minimizes windows via CDP after the Cloudflare challenge) and navigate the main
-   *  page to the login URL so the user can sign in directly in this browser. */
+  /** Open the login URL in a VISIBLE browser window so the user can sign in.
+   *  The normal (hidden, headless) context is closed first — both share the same
+   *  persistent profile, which only one Chrome process can hold at a time.
+   *  Call close() after login finishes; the next request relaunches hidden. */
   async openLoginPage(url: string): Promise<void> {
-    await this.ensureInit();
+    if (this.initPromise && !this.visible) await this.close();
+    await this.ensureInit(true);
     if (!this.mainPage) {
       throw new Error("Browser main page not initialized; cannot open login page");
     }
-
-    // Restore the window from its minimized state so the user can see and use it.
-    // Mirrors init()'s single CDP setWindowBounds to "minimized" with a single
-    // setWindowBounds to "normal".
-    try {
-      const cdp = await this.mainPage.context().newCDPSession(this.mainPage);
-      const { windowId } = await cdp.send("Browser.getWindowForTarget");
-      await cdp.send("Browser.setWindowBounds", {
-        windowId,
-        bounds: { windowState: "normal" },
-      });
-    } catch {
-      // CDP restore not supported — the page will still load; continue
-    }
-
     await this.navigateAndWaitForCf(this.mainPage, url);
   }
 
   async close(): Promise<void> {
     this.clearIdleTimer();
-    const b = this.browser;
-    this.browser = null;
+    const pending = this.initPromise;
+    this.initPromise = null;
+    if (pending) await pending.catch(() => {});
+    const ctx = this.context;
     this.context = null;
     this.mainPage = null;
     this.authorsPage = null;
-    this.initPromise = null;
-    if (b) {
+    // A persistent context has no separate Browser object (context.browser() is null),
+    // so the context itself must be closed to terminate Chrome.
+    if (ctx) {
       console.error("[browser-client] Closing Chrome");
-      await b.close().catch(() => {});
+      await ctx.close().catch(() => {});
     }
   }
 
@@ -186,14 +163,20 @@ export class BrowserClient {
     }
   }
 
-  private async ensureInit(): Promise<void> {
-    if (this.mainPage) return;
+  /** Reuse whatever context is open (hidden, or a visible login window still in use);
+   *  otherwise launch one. `visible` only matters when a new context is launched. */
+  private async ensureInit(visible = false): Promise<void> {
     if (this.initPromise) return this.initPromise;
-    this.initPromise = this.init();
-    return this.initPromise;
+    this.visible = visible || process.env.CURSEFORGE_BROWSER_VISIBLE === "1";
+    const p = this.init(this.visible);
+    this.initPromise = p;
+    p.catch(() => {
+      if (this.initPromise === p) this.initPromise = null;
+    });
+    return p;
   }
 
-  private async init(): Promise<void> {
+  private async init(visible: boolean): Promise<void> {
     let chromium: any;
     try {
       const mod = await import("patchright");
@@ -215,8 +198,10 @@ export class BrowserClient {
     // patchright patches out automation flags (--enable-automation, navigator.webdriver, etc.)
     // Use launchPersistentContext for maximum stealth.
     //
-    //   - `headless: false` is required to reliably pass the Cloudflare challenge, but it
-    //     needs a real display: on Linux/CI run under xvfb (or an equivalent virtual display).
+    //   - Normal requests run fully headless (new headless mode: the real Chrome binary, no
+    //     window, no taskbar entry, no display needed). Cloudflare rejects headless only by
+    //     its "HeadlessChrome" user-agent token, so preparePage() overrides the UA per page.
+    //   - Interactive login (visible=true) runs headed so the user can sign in.
     //
     // Two launch strategies, tried in order:
     //   1. Bundled Chromium (no executablePath): a separate browser binary, so it coexists
@@ -224,44 +209,54 @@ export class BrowserClient {
     //   2. System Chrome (executablePath): fallback when the bundled browser isn't installed.
     //      Reuses the SAME dedicated userDataDir for session persistence. Can still fail if
     //      the user's own Chrome is already running off a shared install.
-    const context = await this.launchContext(chromium, userDataDir);
+    const context = await this.launchContext(chromium, userDataDir, visible);
     this.context = context;
-    this.browser = context.browser();
+    try {
+      const playwrightCookies = this.cookies.map(toPlaywrightCookie);
+      if (playwrightCookies.length) await context.addCookies(playwrightCookies);
 
-    const playwrightCookies = this.cookies.map(toPlaywrightCookie);
-    if (playwrightCookies.length) await context.addCookies(playwrightCookies);
+      // Use existing blank page for main site
+      const pages = context.pages();
+      const mainPage = pages[0] || await context.newPage();
+      await this.preparePage(mainPage);
+      console.error("[browser-client] Navigating to www.curseforge.com...");
+      await this.navigateAndWaitForCf(mainPage, "https://www.curseforge.com/");
 
-    // Use existing blank page for main site
-    const pages = context.pages();
-    this.mainPage = pages[0] || await context.newPage();
-    console.error("[browser-client] Navigating to www.curseforge.com...");
-    await this.navigateAndWaitForCf(this.mainPage, "https://www.curseforge.com/");
+      // Open second page for authors site
+      const authorsPage = await context.newPage();
+      await this.preparePage(authorsPage);
+      console.error("[browser-client] Navigating to authors.curseforge.com...");
+      await this.navigateAndWaitForCf(authorsPage, "https://authors.curseforge.com/");
 
-    // Open second page for authors site
-    this.authorsPage = await context.newPage();
-    console.error("[browser-client] Navigating to authors.curseforge.com...");
-    await this.navigateAndWaitForCf(this.authorsPage, "https://authors.curseforge.com/");
-
-    // Minimize all browser windows via CDP after Cloudflare is passed
-    for (const page of [this.mainPage, this.authorsPage]) {
-      try {
-        const cdp = await page.context().newCDPSession(page);
-        const { windowId } = await cdp.send("Browser.getWindowForTarget");
-        await cdp.send("Browser.setWindowBounds", {
-          windowId,
-          bounds: { windowState: "minimized" },
-        });
-      } catch {
-        // CDP minimize not supported — continue
-      }
+      this.mainPage = mainPage;
+      this.authorsPage = authorsPage;
+    } catch (err) {
+      this.context = null;
+      await context.close().catch(() => {});
+      throw err;
     }
 
-    console.error("[browser-client] Chrome ready");
+    console.error(`[browser-client] Chrome ready (${visible ? "visible" : "headless"})`);
+  }
+
+  /** Headless Chrome advertises "HeadlessChrome" in its user agent, which Cloudflare
+   *  blocks. Replace it with the real browser's plain UA (version kept exact). */
+  private async preparePage(page: Page): Promise<void> {
+    if (this.visible) return;
+    const cdp = await page.context().newCDPSession(page);
+    const { userAgent } = await cdp.send("Browser.getVersion");
+    await cdp.send("Emulation.setUserAgentOverride", {
+      userAgent: userAgent.replace("HeadlessChrome", "Chrome"),
+    });
   }
 
   // Launch a persistent context, preferring patchright's bundled Chromium and falling back
   // to system Chrome. Both paths share the same dedicated userDataDir for session persistence.
-  private async launchContext(chromium: any, userDataDir: string): Promise<BrowserContext> {
+  private async launchContext(
+    chromium: any,
+    userDataDir: string,
+    visible: boolean,
+  ): Promise<BrowserContext> {
     // The Chrome sandbox cannot run as root and is unavailable in most containers; only
     // disable it where the platform actually requires it. Trusted CurseForge origins only.
     const needsNoSandbox =
@@ -270,21 +265,27 @@ export class BrowserClient {
       process.getuid() === 0;
     const baseArgs = ["--lang=en-US", ...(needsNoSandbox ? ["--no-sandbox"] : [])];
     const launchOpts = {
-      headless: false,
+      headless: !visible,
       args: baseArgs,
       viewport: null,
-    } as const;
+    };
 
     // 1. Bundled Chromium — no executablePath means patchright uses its own browser binary.
+    //    channel "chromium" selects the full browser (new headless mode) instead of the
+    //    stripped chromium-headless-shell.
     try {
-      console.error("[browser-client] Launching bundled Chromium via patchright");
-      return await chromium.launchPersistentContext(userDataDir, launchOpts);
+      console.error(
+        `[browser-client] Launching bundled Chromium via patchright (headless=${launchOpts.headless})`,
+      );
+      return await chromium.launchPersistentContext(userDataDir, { ...launchOpts, channel: "chromium" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const bundledMissing =
         msg.includes("Executable doesn't exist") || msg.includes("patchright install");
       if (!bundledMissing) throw err;
-      console.error("[browser-client] Bundled Chromium not installed, falling back to system Chrome");
+      console.error(
+        `[browser-client] Bundled Chromium not installed, falling back to system Chrome (${msg.split("\n")[0]})`,
+      );
     }
 
     // 2. System Chrome fallback — same dedicated userDataDir.
@@ -297,7 +298,7 @@ export class BrowserClient {
       );
     }
 
-    console.error(`[browser-client] Launching system Chrome via patchright: ${chromePath}`);
+    console.error(`[browser-client] Launching system Chrome via patchright (headless=${launchOpts.headless}): ${chromePath}`);
     try {
       return await chromium.launchPersistentContext(userDataDir, {
         ...launchOpts,
