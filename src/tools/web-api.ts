@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 import type { WebClient } from "../clients/web-client.js";
 import { formatCommentThread, compact, truncate } from "../utils/helpers.js";
 import { success, error } from "../utils/types.js";
-import { formatArg, jsonResult, jsonError, CodedError } from "../utils/structured.js";
+import { formatArg, jsonResult, jsonError, CodedError, writeError } from "../utils/structured.js";
 import { commentsJson, findPosted } from "./json-shapes.js";
 
 const CF_BASE = "https://www.curseforge.com";
@@ -179,7 +179,12 @@ export function registerWebApiTools(
           if (!client.hasCookies()) throw new CodedError("not_logged_in", "No session cookies. Use cf_auto_extract_cookies first.");
           const body: Record<string, unknown> = { entityId: mod_id, body: comment_text, bodyType: "RawHtml" };
           if (reply_to_id !== undefined) body.parentId = reply_to_id;
-          const res = await client.postQuiet(`${CF_BASE}/api/v1/comments`, body);
+          let res: any;
+          try {
+            res = await client.postQuiet(`${CF_BASE}/api/v1/comments`, body);
+          } catch (e) {
+            throw writeError(e); // a 5xx or lost answer may still have saved the comment
+          }
           const direct = res && typeof res === "object" ? (res.id ?? res.data?.id) : undefined;
           let id: string | null = direct != null ? String(direct) : null;
           if (id === null) {

@@ -16,7 +16,7 @@ import {
   SessionResultSchema,
   ExtractResultSchema,
 } from "../src/tools/json-shapes.js";
-import { jsonResult, jsonError, errorCode, CodedError, isoUtc } from "../src/utils/structured.js";
+import { jsonResult, jsonError, errorCode, CodedError, isoUtc, writeError } from "../src/utils/structured.js";
 
 const fixture = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}`, import.meta.url), "utf8"));
 
@@ -109,4 +109,15 @@ test("json envelope and error codes", () => {
   PostResultSchema.parse({ posted: true, id: null, parentId: "1", verified: false });
   SessionResultSchema.parse({ loggedIn: true, cookiesStored: true, user: { id: 1, displayName: "M", username: "m" }, detail: "session valid" });
   ExtractResultSchema.parse({ result: "Extracted 12 cookies from chrome", cookiesStored: true, loginWindowOpened: false });
+});
+
+test("post_comment: a failed write is outcome_unknown unless the site refused it (4xx)", () => {
+  assert.equal(errorCode(writeError(new Error("HTTP 500: https://www.curseforge.com/api/v1/comments"))), "outcome_unknown");
+  assert.equal(errorCode(writeError(new Error("page.evaluate: Timeout 30000ms exceeded"))), "outcome_unknown");
+  assert.equal(errorCode(writeError(new Error("Unexpected token < in JSON at position 0"))), "outcome_unknown");
+  assert.equal(errorCode(writeError(new Error("HTTP 408: x"))), "outcome_unknown");
+  assert.equal(errorCode(writeError(new Error("HTTP 401: x"))), "not_logged_in");
+  assert.equal(errorCode(writeError(new Error("HTTP 403: x"))), "cloudflare");
+  assert.equal(errorCode(writeError(new Error("HTTP 429: x"))), "rate_limited");
+  assert.equal(errorCode(writeError(new Error("HTTP 400: bad body"))), "error");
 });

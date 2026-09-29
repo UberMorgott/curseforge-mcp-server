@@ -12,7 +12,19 @@ export const formatArg = z
   .default("text")
   .describe('"json" = full untruncated machine-readable result (structuredContent); default "text"');
 
-export type ErrorCode = "not_logged_in" | "cloudflare" | "not_found" | "disabled" | "rate_limited" | "invalid" | "error";
+/** outcome_unknown: a write request was sent but its result is not known (timeout, 5xx,
+ *  unreadable answer): it may have been saved. Callers read back instead of retrying. */
+export type ErrorCode = "not_logged_in" | "cloudflare" | "not_found" | "disabled" | "rate_limited" | "invalid" | "outcome_unknown" | "error";
+
+/** Error for a failed write request: an HTTP 4xx (except 408) is a refusal and keeps
+ *  its own code; anything else (5xx, lost answer, unreadable body) is outcome_unknown. */
+export function writeError(e: unknown): Error {
+  const m = e instanceof Error ? e.message : String(e);
+  const st = /HTTP (\d{3})/.exec(m);
+  const status = st ? Number(st[1]) : null;
+  if (status !== null && status >= 400 && status < 500 && status !== 408) return e instanceof Error ? e : new Error(m);
+  return new CodedError("outcome_unknown", `${m} (the request was sent: it may have been saved — read back before retrying)`);
+}
 
 export class CodedError extends Error {
   constructor(

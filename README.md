@@ -198,7 +198,9 @@ ISO-8601 UTC or `null`.
 
 Errors (`isError: true`): `structuredContent = {error:{code, message}}`, `code` ∈
 `not_logged_in` (no cookies / HTTP 401), `cloudflare` (HTTP 403 after the challenge retry),
-`not_found`, `disabled`, `rate_limited`, `invalid`, `error`. Writes are never retried;
+`not_found`, `disabled`, `rate_limited`, `invalid`, `outcome_unknown` (`post_comment` was
+sent but failed without a 4xx refusal — 5xx, timeout, unreadable answer: it may have been
+saved, read back before retrying), `error`. Writes are never retried;
 browser GETs back off once on HTTP 429 (3 s).
 
 ## Environment Variables
