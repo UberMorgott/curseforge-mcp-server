@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { WebClient, type WebBrowser } from "../src/clients/web-client.js";
 import type { Config } from "../src/config.js";
+import { browserFromProgId } from "../src/clients/default-browser.js";
 import type { CookieEntry } from "../src/utils/types.js";
 
 const ck = (name: string, value = "v"): CookieEntry => ({ name, value, domain: ".curseforge.com", path: "/" });
@@ -306,4 +307,12 @@ test("cf_login_cancel: stops default-browser polling and closes the sign-in wind
   assert.equal(await win.cancelLogin(), true);
   assert.equal(win.loginInProgress, false);
   assert.ok(log.includes("close"), "sign-in window closed");
+});
+test("default browser ProgId mapping (incl. Cent Browser)", () => {
+  const cases: Array<[string | null, string | null]> = [
+    ["ChromeHTML", "chrome"], ["MSEdgeHTM", "edge"], ["FirefoxURL-308046B0AF4A39CB", "firefox"], ["BraveHTML", "brave"],
+    ["OperaGXStable", "opera"], ["VivaldiHTM", "vivaldi"], ["YandexHTML", "yandex"],
+    ["CentHTM.PVOYJF5YAEQRUHCVWLHIFLU56M", "centbrowser"], ["SomethingElse", null], [null, null],
+  ];
+  for (const [progId, want] of cases) assert.equal(browserFromProgId(progId), want, String(progId));
 });

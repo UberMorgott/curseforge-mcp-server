@@ -22,6 +22,7 @@ export function browserFromProgId(progId: string | null): string | null {
   if (progId.startsWith("Opera")) return "opera";
   if (progId === "VivaldiHTM") return "vivaldi";
   if (progId === "YandexHTML") return "yandex";
+  if (progId.startsWith("CentHTM")) return "centbrowser";
   return null;
 }
 

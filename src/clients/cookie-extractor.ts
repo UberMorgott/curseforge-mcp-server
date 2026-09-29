@@ -1,4 +1,6 @@
 import os from "node:os";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { CookieObject } from "@rookie-rs/api";
 import type { CookieEntry } from "../utils/types.js";
@@ -24,12 +26,55 @@ function toCookieEntries(raw: CookieObject[]): CookieEntry[] {
   }));
 }
 
-/** Yandex is Chromium-based but has no rookie shortcut (Windows profile layout). */
-function yandex(r: Rookie): BrowserFn {
+const localAppData = () => process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local");
+
+/** Chromium-based browser without a rookie shortcut: read `<userData>\<last used profile>\
+ *  (Network\)Cookies` with the `Local State` key. First existing user-data dir wins. */
+function chromiumUserData(r: Rookie, dirs: () => string[]): BrowserFn {
   return (domains) => {
-    const base = path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), "Yandex", "YandexBrowser", "User Data");
-    return r.chromiumBased(path.join(base, "Local State"), path.join(base, "Default", "Network", "Cookies"), domains);
+    const userData = dirs().find((d) => existsSync(path.join(d, "Local State")));
+    if (!userData) throw new Error("not installed (no User Data dir with Local State)");
+    const localState = path.join(userData, "Local State");
+    let profile = "Default";
+    try {
+      profile = JSON.parse(readFileSync(localState, "utf-8"))?.profile?.last_used || "Default";
+    } catch {
+      // unreadable Local State: rookie reports the key error below
+    }
+    const network = path.join(userData, profile, "Network", "Cookies");
+    const db = existsSync(network) ? network : path.join(userData, profile, "Cookies");
+    return r.chromiumBased(localState, db, domains);
   };
+}
+
+let centDirs: string[] | null = null;
+
+/** Cent Browser: the standard install dir, plus portable installs (User Data next to
+ *  chrome.exe) found through the StartMenuInternet registration's open command. */
+function centBrowserDirs(): string[] {
+  if (centDirs) return centDirs;
+  const dirs = [path.join(localAppData(), "CentBrowser", "User Data")];
+  if (process.platform === "win32") {
+    const reg = (args: string[]) => execFileSync("reg", args, { encoding: "utf-8", windowsHide: true, timeout: 10_000 });
+    try {
+      const keys = reg(["query", "HKCU\\Software\\Clients\\StartMenuInternet"])
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => /\\CentBrowser[^\\]*$/i.test(l));
+      for (const key of keys) {
+        try {
+          const exe = /REG_\w+\s+"?([^"\r\n]+?\.exe)/i.exec(reg(["query", `${key}\\shell\\open\\command`, "/ve"]))?.[1];
+          if (exe) dirs.push(path.join(path.dirname(exe), "User Data"));
+        } catch {
+          // registration without an open command
+        }
+      }
+    } catch {
+      // no StartMenuInternet key
+    }
+  }
+  centDirs = dirs;
+  return dirs;
 }
 
 /** Browser keys (lowercase) in the order the silent extraction tries them. */
@@ -43,7 +88,8 @@ function browserTable(r: Rookie): Array<[string, BrowserFn]> {
     ["opera", r.opera],
     ["opera gx", r.operaGx],
     ["vivaldi", r.vivaldi],
-    ["yandex", yandex(r)],
+    ["yandex", chromiumUserData(r, () => [path.join(localAppData(), "Yandex", "YandexBrowser", "User Data")])],
+    ["centbrowser", chromiumUserData(r, centBrowserDirs)],
     ["arc", r.arc],
     ["librewolf", r.librewolf],
     ["octobrowser", r.octoBrowser],
