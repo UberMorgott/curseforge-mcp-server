@@ -16,6 +16,7 @@ import {
   SessionResultSchema,
   ExtractResultSchema,
   LogoutResultSchema,
+  LoginCancelResultSchema,
 } from "../src/tools/json-shapes.js";
 import { jsonResult, jsonError, errorCode, CodedError, isoUtc, writeError } from "../src/utils/structured.js";
 
@@ -108,10 +109,11 @@ test("json envelope and error codes", () => {
   assert.equal(errorCode(new Error("HTTP 429: x")), "rate_limited");
   assert.equal(errorCode(new Error("boom")), "error");
   PostResultSchema.parse({ posted: true, id: null, parentId: "1", verified: false });
-  SessionResultSchema.parse({ loggedIn: true, cookiesStored: true, user: { id: 1, displayName: "M", username: "m" }, detail: "session valid", loginInProgress: false, sessionSource: "window", sessionBrowser: null });
-  ExtractResultSchema.parse({ result: "Extracted 12 cookies from chrome", cookiesStored: true, loginWindowOpened: false, loggedIn: true, loginInProgress: false, sessionSource: "browser", sessionBrowser: "chrome" });
+  SessionResultSchema.parse({ loggedIn: true, cookiesStored: true, user: { id: 1, displayName: "M", username: "m" }, detail: "session valid", loginInProgress: false, sessionSource: "window", sessionBrowser: null, loginVia: "window", loginBrowser: null });
+  ExtractResultSchema.parse({ result: "Extracted 12 cookies from chrome", cookiesStored: true, loginWindowOpened: false, loggedIn: true, loginInProgress: false, sessionSource: "browser", sessionBrowser: "chrome", loginVia: "default-browser", loginBrowser: "chrome" });
   LogoutResultSchema.parse({ loggedOut: true, cookiesStored: false });
-  assert.throws(() => SessionResultSchema.parse({ loggedIn: false, cookiesStored: false, user: null, detail: "x", loginInProgress: false, sessionSource: "other", sessionBrowser: null }));
+  assert.throws(() => SessionResultSchema.parse({ loggedIn: false, cookiesStored: false, user: null, detail: "x", loginInProgress: false, sessionSource: "other", sessionBrowser: null, loginVia: null, loginBrowser: null }));
+  LoginCancelResultSchema.parse({ cancelled: false });
 });
 
 test("post_comment: a failed write is outcome_unknown unless the site refused it (4xx)", () => {

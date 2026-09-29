@@ -163,7 +163,8 @@ These tools have no official CurseForge API. They use a real browser (patchright
 | Tool | Description |
 |------|-------------|
 | `cf_set_cookies` | Set session cookies manually |
-| `cf_auto_extract_cookies` | Auto-extract cookies from browser |
+| `cf_auto_extract_cookies` | Sign in: silent extract from installed browsers → else login page in the default browser (if its cookie store is readable) → else the server's sign-in window |
+| `cf_login_cancel` | Stop a running sign-in (default-browser polling / sign-in window) |
 | `cf_session_status` | Is the stored session signed in (never opens a login window) |
 | `cf_logout` | Sign out: close the login window, delete stored cookies and clear them from the browser profile; no silent re-extract at startup until the next explicit sign-in |
 | `get_comments` | Read threaded comments on a project |
@@ -178,7 +179,7 @@ These tools have no official CurseForge API. They use a real browser (patchright
 
 For programs (e.g. IssueWatcher) these tools take `format: "json"` (default `"text"`,
 unchanged): `search_author`, `get_project`, `get_comments`, `post_comment`,
-`cf_session_status`, `cf_auto_extract_cookies`, `cf_logout`. The result is the full, untruncated object
+`cf_session_status`, `cf_auto_extract_cookies`, `cf_login_cancel`, `cf_logout`. The result is the full, untruncated object
 as MCP `structuredContent`, and the same JSON in the text block. No `outputSchema` is
 declared (the SDK would then demand structuredContent in text mode too); the zod schemas
 live in `src/tools/json-shapes.ts` and are checked by `npm test` against saved API
@@ -194,8 +195,9 @@ ISO-8601 UTC or `null`.
 | `get_project` | `{id, title, summary, game, type, url, createdAt, downloads, members:[{id, username, title}]}` |
 | `get_comments` | `{modId, page, pages, pageSize:20, total, comments:[{id, parentId:null, author, authorId, authorUsername, createdAt, updatedAt, body, bodyHtml, pinned, replies:[{id, parentId, depth, author, authorId, authorUsername, createdAt, updatedAt, body, bodyHtml}]}]}` — root threads newest first; every nested reply flattened depth-first with its `parentId` (`depth` 1 = reply to the root); 20 entries per page **counting replies**, `total` = entries; a new reply on an old thread stays on that thread's page, so a sync must walk all `pages`. `body` = site plain text, `bodyHtml` = rendered HTML; `updatedAt` = `dateEdited` |
 | `post_comment` | `{posted:true, id, parentId, verified}` — `id` from the response if it has one, else read back (first 3 pages, same text + same parent, newest); `verified:false, id:null` if not found |
-| `cf_session_status` | `{loggedIn, cookiesStored, user:{id, displayName, username} \| null, detail, loginInProgress, sessionSource, sessionBrowser}` — the site's own `GET /api/v1/users/profile`; never opens a login window; `loginInProgress` = the login window is still open and being watched; `sessionSource` = where the stored session came from: `"browser"` (extracted from an installed browser, incl. the silent startup extract; `sessionBrowser` = its name), `"window"` (the sign-in window), `"manual"` (`cf_set_cookies`), or `null` (no cookies / unknown legacy session). Kept in `session.json` next to `cookies.json` |
-| `cf_auto_extract_cookies` | `{result, cookiesStored, loginWindowOpened, loggedIn, loginInProgress, sessionSource, sessionBrowser}` — extracted browser cookies are kept only if the session check says signed in (`loggedIn:true`); anonymous cookies are discarded (previous ones restored) and the login window opens instead. The window waits up to 10 min for sign-in (2FA/Google), then closes; poll `cf_session_status` until `loggedIn` |
+| `cf_session_status` | `{loggedIn, cookiesStored, user:{id, displayName, username} \| null, detail, loginInProgress, sessionSource, sessionBrowser, loginVia, loginBrowser}` — the site's own `GET /api/v1/users/profile`; never opens a login window; `loginInProgress` = the login window is still open and being watched; `sessionSource` = where the stored session came from: `"browser"` (extracted from an installed browser, incl. the silent startup extract; `sessionBrowser` = its name), `"window"` (the sign-in window), `"manual"` (`cf_set_cookies`), or `null` (no cookies / unknown legacy session). Kept in `session.json` next to `cookies.json`. `loginVia` = path of the current / last sign-in of this process: `"browser-extract"` \| `"default-browser"` \| `"window"` \| `null`; `loginBrowser` = the default browser when `"default-browser"`, else `null` |
+| `cf_auto_extract_cookies` | `{result, cookiesStored, loginWindowOpened, loggedIn, loginInProgress, sessionSource, sessionBrowser, loginVia, loginBrowser}` — order: (1) extract from every installed browser, first signed-in one wins (`loginVia:"browser-extract"`); anonymous cookies are never kept; (2) else detect the default browser (Windows `UserChoice` ProgId) and, if its cookie store is readable (not Chrome 127+ app-bound), open the login page there and poll its cookies (`loginVia:"default-browser"`, success → `sessionSource:"browser"`); (3) else the server's sign-in window (`loginVia:"window"`). `loginWindowOpened` = this call started (2) or (3); `loginInProgress` stays true while it polls. Every step is logged to stderr with the `[login] ` prefix. The window waits up to 10 min for sign-in (2FA/Google), then closes; poll `cf_session_status` until `loggedIn` |
+| `cf_login_cancel` | `{cancelled}` — `true` if a running sign-in was stopped (sign-in window closed) |
 | `cf_logout` | `{loggedOut:true, cookiesStored:false}` — stops the login window, deletes `cookies.json`, clears curseforge.com cookies in the browser profile and marks the session signed out, so startup does not re-extract browser cookies until the next `cf_auto_extract_cookies` / `cf_set_cookies` / window sign-in. Idempotent |
 
 Errors (`isError: true`): `structuredContent = {error:{code, message}}`, `code` ∈

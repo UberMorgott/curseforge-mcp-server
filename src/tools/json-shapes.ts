@@ -116,6 +116,9 @@ export const PostResultSchema = z.object({
 /** Where the stored web session came from (null = none stored / unknown legacy file). */
 export const SessionSourceSchema = z.enum(["browser", "window", "manual"]).nullable();
 
+/** Path of the current / last sign-in of the server process. */
+export const LoginViaSchema = z.enum(["browser-extract", "default-browser", "window"]).nullable();
+
 export const SessionResultSchema = z.object({
   loggedIn: z.boolean(),
   cookiesStored: z.boolean(),
@@ -124,6 +127,8 @@ export const SessionResultSchema = z.object({
   loginInProgress: z.boolean(),
   sessionSource: SessionSourceSchema,
   sessionBrowser: z.string().nullable(),
+  loginVia: LoginViaSchema,
+  loginBrowser: z.string().nullable(),
 });
 
 export const ExtractResultSchema = z.object({
@@ -134,7 +139,11 @@ export const ExtractResultSchema = z.object({
   loginInProgress: z.boolean(),
   sessionSource: SessionSourceSchema,
   sessionBrowser: z.string().nullable(),
+  loginVia: LoginViaSchema,
+  loginBrowser: z.string().nullable(),
 });
+
+export const LoginCancelResultSchema = z.object({ cancelled: z.boolean() });
 
 export const LogoutResultSchema = z.object({
   loggedOut: z.literal(true),

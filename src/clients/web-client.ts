@@ -4,6 +4,7 @@ import type { Config } from "../config.js";
 import type { CookieEntry } from "../utils/types.js";
 import { CookieExtractor, type ExtractionResult } from "./cookie-extractor.js";
 import { BrowserClient } from "./browser-client.js";
+import { detectDefaultBrowser, openInDefaultBrowser, type DefaultBrowser } from "./default-browser.js";
 
 /** The BrowserClient surface WebClient uses (test seam). */
 export type WebBrowser = Pick<BrowserClient, "setCookies" | "getCookies" | "openLoginPage" | "close" | "request" | "clearSession">;
@@ -23,22 +24,44 @@ interface SessionMeta {
 /** Optional dependencies, overridable in tests (no real browser / network). */
 export interface WebClientDeps {
   browser?: WebBrowser;
-  extract?: () => Promise<ExtractionResult>;
+  /** Every installed browser's curseforge.com cookies (or read error), in try order. */
+  extractAll?: () => Promise<ExtractionResult[]>;
+  /** One browser's cookies by key; `error` = its store is unreadable. */
+  extractFrom?: (browser: string) => Promise<ExtractionResult>;
+  detectDefaultBrowser?: () => Promise<DefaultBrowser>;
+  openUrl?: (url: string) => Promise<void>;
   loginPollMs?: number;
   loginMaxWaitMs?: number;
 }
 
+/** How the current / last sign-in of this process runs: silent extraction from installed
+ *  browsers, polling the user's default browser after opening the login page there, or
+ *  the server's own sign-in window. */
+export type LoginVia = "browser-extract" | "default-browser" | "window" | null;
+
 export interface AutoExtractResult {
   message: string;
-  /** Session check result right after extraction (false when the login window was opened instead). */
+  /** Session check result right after extraction (false when a login was started instead). */
   loggedIn: boolean;
+  /** This call opened the login page (default browser or the sign-in window). */
+  loginStarted: boolean;
 }
+
+const LOGIN_URL = "https://www.curseforge.com/login";
+const log = (msg: string) => console.error(`[login] ${msg}`);
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const fingerprint = (c: CookieEntry[]) => c.map((x) => `${x.name}=${x.value}`).sort().join(";");
 
 export class WebClient {
   private cookies: CookieEntry[] = [];
   private config: Config;
   private browser: WebBrowser;
-  private extract: () => Promise<ExtractionResult>;
+  private extractAll: () => Promise<ExtractionResult[]>;
+  private extractFrom: (browser: string) => Promise<ExtractionResult>;
+  private detectDefault: () => Promise<DefaultBrowser>;
+  private openUrl: (url: string) => Promise<void>;
+  private via: LoginVia = null;
+  private viaBrowser: string | null = null;
   private loginPollMs: number;
   private loginMaxWaitMs: number;
   private loginAttempted = false;
@@ -51,7 +74,11 @@ export class WebClient {
   constructor(config: Config, deps: WebClientDeps = {}) {
     this.config = config;
     this.browser = deps.browser ?? new BrowserClient();
-    this.extract = deps.extract ?? (() => new CookieExtractor().extractCookies());
+    const extractor = new CookieExtractor();
+    this.extractAll = deps.extractAll ?? (() => extractor.extractAll());
+    this.extractFrom = deps.extractFrom ?? ((b) => extractor.extractFrom(b));
+    this.detectDefault = deps.detectDefaultBrowser ?? detectDefaultBrowser;
+    this.openUrl = deps.openUrl ?? openInDefaultBrowser;
     this.loginPollMs = deps.loginPollMs ?? 3_000;
     // Generous: users with 2FA / Google sign-in need several minutes.
     this.loginMaxWaitMs = deps.loginMaxWaitMs ?? 600_000;
@@ -59,9 +86,19 @@ export class WebClient {
     this.loadMeta();
   }
 
-  /** True while the visible login window is open and being polled for a session. */
+  /** True while a started login (default browser or sign-in window) is being polled. */
   get loginInProgress(): boolean {
     return this.loginPolling;
+  }
+
+  /** Path of the current / last sign-in in this process (null = none since start / logout). */
+  get loginVia(): LoginVia {
+    return this.via;
+  }
+
+  /** Default browser being used, when loginVia is "default-browser". */
+  get loginBrowser(): string | null {
+    return this.via === "default-browser" ? this.viaBrowser : null;
   }
 
   /** Origin of the stored session (null when no cookies are stored or it is unknown). */
@@ -123,14 +160,12 @@ export class WebClient {
   /** Silent @rookie-rs extraction for startup; no login window, no throw. */
   private async backgroundExtract(): Promise<void> {
     try {
-      const result = await this.extract();
-      if (result.cookies.length > 0) {
+      const result = (await this.extractAll()).find((r) => r.cookies.length > 0);
+      if (result) {
         this.cookies = result.cookies;
         this.browser.setCookies(result.cookies);
         this.saveSession("browser", result.browser);
-        console.error(
-          `[web-client] Extracted ${result.cookies.length} cookies from ${result.browser}`,
-        );
+        log(`startup extract: ${result.cookies.length} cookies from ${result.browser} (source browser/${result.browser})`);
       }
     } catch (e) {
       console.error(
@@ -197,40 +232,148 @@ export class WebClient {
     return this.cookies.length > 0;
   }
 
-  /** Extract system-browser cookies and keep them only if they carry a signed-in
-   *  session (anonymous visit cookies don't). Otherwise restore the previous cookies
-   *  and open the login window. */
+  /** Try cookies as the session: keep them if the site says signed in, else restore. */
+  private async trySession(cookies: CookieEntry[]): Promise<{ loggedIn: boolean; detail: string }> {
+    const previous = this.cookies;
+    this.cookies = cookies;
+    this.browser.setCookies(cookies);
+    let status: { loggedIn: boolean; detail: string };
+    try {
+      status = await this.sessionStatus();
+    } catch (e) {
+      status = { loggedIn: false, detail: errMsg(e) };
+    }
+    if (!status.loggedIn) {
+      this.cookies = previous;
+      this.browser.setCookies(previous);
+    }
+    return status;
+  }
+
+  /** Sign-in, in this order:
+   *  1. silently extract cookies from every installed browser; the first signed-in one wins;
+   *  2. else, if the user's default browser's cookie store is readable, open the login page
+   *     there and poll that browser's cookies until signed in (background);
+   *  3. else open the server's own sign-in window (background).
+   *  Anonymous cookies are never kept. Returns immediately after starting 2 or 3. */
   async autoExtractCookies(): Promise<AutoExtractResult> {
     // An explicit sign-in request ends the signed-out state from cf_logout.
     if (this.meta.signedOut) this.saveMeta({ ...this.meta, signedOut: false });
     try {
-      const result = await this.extract();
-      if (result.cookies.length > 0) {
-        const previous = this.cookies;
-        this.cookies = result.cookies;
-        this.browser.setCookies(result.cookies);
-        let status: { loggedIn: boolean; detail: string };
-        try {
-          status = await this.sessionStatus();
-        } catch (e) {
-          status = { loggedIn: false, detail: e instanceof Error ? e.message : String(e) };
-        }
-        if (status.loggedIn) {
-          this.saveSession("browser", result.browser);
-          return { message: `Extracted ${result.cookies.length} cookies from ${result.browser}`, loggedIn: true };
-        }
-        console.error(`[web-client] Extracted cookies from ${result.browser} are not signed in (${status.detail}); opening login.`);
-        this.cookies = previous;
-        this.browser.setCookies(previous);
+      // 1. Silent extraction.
+      let results: ExtractionResult[] = [];
+      try {
+        results = await this.extractAll();
+      } catch (e) {
+        log(`extract failed: ${errMsg(e)}`);
       }
-      // Nothing usable (no cookies, App-Bound Encryption on Windows Chrome 127+, or
-      // an anonymous session). Fall back to the in-browser login that works on any OS.
-      return { message: await this.browserLogin(), loggedIn: false };
+      for (const r of results) {
+        if (r.error) {
+          log(`extract ${r.browser}: error (${r.error})`);
+          continue;
+        }
+        if (r.cookies.length === 0) {
+          log(`extract ${r.browser}: 0 cookies`);
+          continue;
+        }
+        const status = await this.trySession(r.cookies);
+        log(`extract ${r.browser}: ${r.cookies.length} cookies, signed in: ${status.loggedIn ? "yes" : `no (${status.detail})`}`);
+        if (status.loggedIn) {
+          this.saveSession("browser", r.browser);
+          this.via = "browser-extract";
+          this.viaBrowser = null;
+          log(`captured session: source browser/${r.browser}`);
+          return { message: `Extracted ${r.cookies.length} cookies from ${r.browser}`, loggedIn: true, loginStarted: false };
+        }
+      }
+
+      if (this.loginPolling) {
+        const where = this.via === "default-browser" ? `in ${this.viaBrowser}` : "in the sign-in window";
+        log(`login already in progress (${where})`);
+        return { message: `A login is already in progress ${where} — finish signing in there; your session is captured automatically.`, loggedIn: false, loginStarted: false };
+      }
+
+      // 2. The user's default browser, if we can read its cookie store.
+      const viaDefault = await this.defaultBrowserLogin();
+      if (viaDefault) return { message: viaDefault, loggedIn: false, loginStarted: true };
+
+      // 3. The server's own sign-in window.
+      const message = await this.browserLogin();
+      return { message, loggedIn: false, loginStarted: this.loginPolling };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[web-client] Auto-extract failed: ${msg}`);
-      return { message: `Auto-extraction failed: ${msg}`, loggedIn: false };
+      log(`auto-extract failed: ${errMsg(err)}`);
+      return { message: `Auto-extraction failed: ${errMsg(err)}`, loggedIn: false, loginStarted: false };
     }
+  }
+
+  /** Step 2: open the login page in the default browser and poll its cookies.
+   *  Returns the user message, or null when this path does not apply. */
+  private async defaultBrowserLogin(): Promise<string | null> {
+    let def: DefaultBrowser;
+    try {
+      def = await this.detectDefault();
+    } catch (e) {
+      log(`default browser: detection failed (${errMsg(e)})`);
+      return null;
+    }
+    log(`default browser: ProgId ${def.progId ?? "unknown"} -> ${def.browser ?? "unknown"}`);
+    if (!def.browser) return null;
+    const name = def.browser;
+    const probe = await this.extractFrom(name).catch((e): ExtractionResult => ({ browser: name, cookies: [], error: errMsg(e) }));
+    log(`default browser ${name}: cookie store readable: ${probe.error ? `no (${probe.error})` : "yes"}`);
+    if (probe.error) return null;
+    try {
+      await this.openUrl(LOGIN_URL);
+    } catch (e) {
+      log(`default browser ${name}: could not open the login page (${errMsg(e)})`);
+      return null;
+    }
+    log(`opened CurseForge login in default browser ${name}; polling its cookies every ${Math.round(this.loginPollMs / 1000)} s`);
+    this.startLogin("default-browser", name, (gen) => this.pollDefaultBrowser(gen, name, fingerprint(probe.cookies)));
+    return (
+      `The CurseForge login page has opened in your default browser (${name}). Sign in there — ` +
+      "your session is captured automatically; then re-run your action."
+    );
+  }
+
+  /** Track a background login poll (one at a time; cancelled by bumping loginGeneration). */
+  private startLogin(via: Exclude<LoginVia, "browser-extract" | null>, browser: string | null, poll: (gen: number) => Promise<void>): void {
+    this.via = via;
+    this.viaBrowser = browser;
+    this.loginPolling = true;
+    const gen = this.loginGeneration;
+    const task = poll(gen).finally(() => {
+      if (this.loginTask === task) {
+        this.loginTask = null;
+        this.loginPolling = false;
+      }
+    });
+    this.loginTask = task;
+  }
+
+  /** Poll the default browser's cookie store; check the session whenever its cookies change. */
+  private async pollDefaultBrowser(gen: number, name: string, seen: string): Promise<void> {
+    const start = Date.now();
+    const cancelled = () => gen !== this.loginGeneration;
+    while (Date.now() - start < this.loginMaxWaitMs) {
+      await new Promise((r) => setTimeout(r, this.loginPollMs));
+      if (cancelled()) return;
+      const r = await this.extractFrom(name).catch((e): ExtractionResult => ({ browser: name, cookies: [], error: errMsg(e) }));
+      if (cancelled()) return;
+      if (r.error || r.cookies.length === 0) continue;
+      const fp = fingerprint(r.cookies);
+      if (fp === seen) continue;
+      seen = fp;
+      const status = await this.trySession(r.cookies);
+      if (cancelled()) return;
+      if (status.loggedIn) {
+        this.saveSession("browser", name);
+        this.loginAttempted = false;
+        log(`captured session: source browser/${name} (${r.cookies.length} cookies)`);
+        return;
+      }
+    }
+    log(`default browser ${name}: login wait timed out (${Math.round(this.loginMaxWaitMs / 1000)} s)`);
   }
 
   /** Reliable cross-OS login: drive the dedicated persistent browser. Opens the
@@ -242,23 +385,14 @@ export class WebClient {
     if (this.loginPolling) {
       return "A login window is already open — finish signing in there; your session is captured automatically.";
     }
-    console.error("[web-client] Opening CurseForge login in the dedicated browser window...");
     try {
-      await this.browser.openLoginPage("https://www.curseforge.com/login");
+      await this.browser.openLoginPage(LOGIN_URL);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return `Could not open the login browser: ${msg} (run: npx patchright install chromium)`;
+      log(`could not open the sign-in window: ${errMsg(e)}`);
+      return `Could not open the login browser: ${errMsg(e)} (run: npx patchright install chromium)`;
     }
-
-    this.loginPolling = true;
-    const gen = this.loginGeneration;
-    const task = this.pollForLogin(gen).finally(() => {
-      if (this.loginTask === task) {
-        this.loginTask = null;
-        this.loginPolling = false;
-      }
-    });
-    this.loginTask = task;
+    log("opened the server sign-in window");
+    this.startLogin("window", null, (gen) => this.pollForLogin(gen));
 
     return (
       "A CurseForge login window has opened. Log in there — your session is captured " +
@@ -279,7 +413,7 @@ export class WebClient {
     try {
       while (Date.now() - start < maxWait) {
         await new Promise((r) => setTimeout(r, pollInterval));
-        if (cancelled()) return; // logout: the window is closed by logout itself
+        if (cancelled()) return; // cancel / logout closes the window itself
         const cookies = await this.browser.getCookies();
         if (cancelled()) return;
         const hasAuth = cookies.some(
@@ -290,34 +424,44 @@ export class WebClient {
           this.browser.setCookies(cookies);
           this.saveSession("window");
           this.loginAttempted = false; // allow a future 401 to re-trigger login
-          console.error(`[web-client] Login detected — ${cookies.length} cookies saved.`);
+          log(`captured session: source window (${cookies.length} cookies)`);
           return;
         }
       }
-      console.error(`[web-client] Login wait timed out (${Math.round(maxWait / 1000)} s).`);
+      log(`sign-in window: login wait timed out (${Math.round(maxWait / 1000)} s)`);
     } catch (e) {
-      if (!cancelled()) console.error(`[web-client] Login window lost: ${e instanceof Error ? e.message : e}`);
+      if (!cancelled()) log(`sign-in window lost: ${errMsg(e)}`);
     } finally {
       // Close the visible login window; the next request relaunches the hidden browser
-      // on the same persistent profile, so the new session carries over. After logout
-      // the browser belongs to logout (it may already be clearing the profile).
+      // on the same persistent profile, so the new session carries over. After a cancel
+      // the browser belongs to the canceller (logout may already be clearing the profile).
       if (!cancelled()) await this.browser.close();
     }
   }
 
-  /** Sign out: stop the login window, forget the cookies (memory, cookies file, live
+  /** Stop a running login (default-browser polling or the sign-in window, which is
+   *  closed). Returns whether one was running. */
+  async cancelLogin(): Promise<boolean> {
+    const task = this.loginTask;
+    if (!task) return false;
+    this.loginGeneration++;
+    this.loginTask = null;
+    this.loginPolling = false;
+    const via = this.via;
+    if (via === "window") await this.browser.close();
+    await task;
+    log(`login cancelled (${via === "default-browser" ? `default browser ${this.viaBrowser}` : "sign-in window"})`);
+    return true;
+  }
+
+  /** Sign out: stop any login, forget the cookies (memory, cookies file, live
    *  browser profile) and persist a signed-out marker so startup does not silently
    *  re-extract browser cookies until the next explicit sign-in. Idempotent. */
   async logout(): Promise<void> {
-    this.loginGeneration++;
-    const task = this.loginTask;
-    this.loginTask = null;
-    this.loginPolling = false;
+    await this.cancelLogin();
     this.loginAttempted = false;
-    if (task) {
-      await this.browser.close(); // closes the visible login window
-      await task;
-    }
+    this.via = null;
+    this.viaBrowser = null;
     this.cookies = [];
     rmSync(this.config.cookiesPath, { force: true });
     this.saveMeta({ source: null, browser: null, signedOut: true });
@@ -325,8 +469,9 @@ export class WebClient {
       await this.browser.clearSession();
     } catch (e) {
       // No browser available = no persistent profile session to clear.
-      console.error(`[web-client] Could not clear the browser profile session: ${e instanceof Error ? e.message : e}`);
+      console.error(`[web-client] Could not clear the browser profile session: ${errMsg(e)}`);
     }
+    log("signed out");
   }
 
   /** Blocking interactive login for the setup wizard (NOT for MCP requests).

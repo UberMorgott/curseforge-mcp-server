@@ -36,6 +36,13 @@ function fakeBrowser(loginCookies: CookieEntry[]) {
   return { b, log };
 }
 
+/** No usable default browser: step 2 is skipped (never touches the real registry / browsers). */
+const noDefault = {
+  detectDefaultBrowser: async () => ({ progId: null, browser: null }),
+  extractFrom: async (browser: string) => ({ browser, cookies: [], error: "not installed" }),
+  openUrl: async () => assert.fail("default browser must not be opened"),
+};
+
 const waitFor = async (cond: () => boolean) => {
   for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 5));
   assert.ok(cond(), "condition not reached");
@@ -45,9 +52,9 @@ test("anonymous extracted cookies: restore previous, open login window, capture 
   const cfg = config();
   writeFileSync(cfg.cookiesPath, JSON.stringify([ck("Old")]));
   const { b, log } = fakeBrowser([ck("SiteUserToken"), ck("SignedIn")]);
-  const client = new WebClient(cfg, {
+  const client = new WebClient(cfg, { ...noDefault,
     browser: b,
-    extract: async () => ({ cookies: [ck("Anon")], browser: "chrome" }),
+    extractAll: async () => [{ cookies: [ck("Anon")], browser: "chrome" }],
     loginPollMs: 1,
     loginMaxWaitMs: 5_000,
   });
@@ -68,9 +75,9 @@ test("anonymous extracted cookies: restore previous, open login window, capture 
 test("anonymous extracted cookies with no previous session: nothing kept, login opens", async () => {
   const cfg = config();
   const { b, log } = fakeBrowser([]);
-  const client = new WebClient(cfg, {
+  const client = new WebClient(cfg, { ...noDefault,
     browser: b,
-    extract: async () => ({ cookies: [ck("Anon")], browser: "edge" }),
+    extractAll: async () => [{ cookies: [ck("Anon")], browser: "edge" }],
     loginPollMs: 1,
     loginMaxWaitMs: 20,
   });
@@ -86,12 +93,12 @@ test("anonymous extracted cookies with no previous session: nothing kept, login 
 test("signed-in extracted cookies: kept, no login window", async () => {
   const cfg = config();
   const { b, log } = fakeBrowser([]);
-  const client = new WebClient(cfg, {
+  const client = new WebClient(cfg, { ...noDefault,
     browser: b,
-    extract: async () => ({ cookies: [ck("SignedIn")], browser: "firefox" }),
+    extractAll: async () => [{ cookies: [ck("SignedIn")], browser: "firefox" }],
   });
   const r = await client.autoExtractCookies();
-  assert.deepEqual(r, { message: "Extracted 1 cookies from firefox", loggedIn: true });
+  assert.deepEqual(r, { message: "Extracted 1 cookies from firefox", loggedIn: true, loginStarted: false });
   assert.equal(client.loginInProgress, false);
   assert.ok(!log.includes("open"));
   assert.deepEqual(JSON.parse(readFileSync(cfg.cookiesPath, "utf8")).map((c: CookieEntry) => c.name), ["SignedIn"]);
@@ -101,11 +108,11 @@ const metaOf = (cfg: Config) => JSON.parse(readFileSync(path.join(cfg.authDir, "
 
 test("session source: browser extract persists browser name across restarts", async () => {
   const cfg = config();
-  const client = new WebClient(cfg, { browser: fakeBrowser([]).b, extract: async () => ({ cookies: [ck("SignedIn")], browser: "firefox" }) });
+  const client = new WebClient(cfg, { ...noDefault, browser: fakeBrowser([]).b, extractAll: async () => [{ cookies: [ck("SignedIn")], browser: "firefox" }] });
   await client.autoExtractCookies();
   assert.equal(client.sessionSource, "browser");
   assert.equal(client.sessionBrowser, "firefox");
-  const again = new WebClient(cfg, { browser: fakeBrowser([]).b, extract: async () => assert.fail("no extract with stored cookies") });
+  const again = new WebClient(cfg, { ...noDefault, browser: fakeBrowser([]).b, extractAll: async () => assert.fail("no extract with stored cookies") });
   again.init();
   assert.equal(again.sessionSource, "browser");
   assert.equal(again.sessionBrowser, "firefox");
@@ -113,7 +120,7 @@ test("session source: browser extract persists browser name across restarts", as
 
 test("session source: startup background extract counts as browser", async () => {
   const cfg = config();
-  const client = new WebClient(cfg, { browser: fakeBrowser([]).b, extract: async () => ({ cookies: [ck("SignedIn")], browser: "edge" }) });
+  const client = new WebClient(cfg, { ...noDefault, browser: fakeBrowser([]).b, extractAll: async () => [{ cookies: [ck("SignedIn")], browser: "edge" }] });
   client.init();
   await waitFor(() => client.hasCookies());
   await waitFor(() => existsSync(path.join(cfg.authDir, "session.json")));
@@ -123,9 +130,9 @@ test("session source: startup background extract counts as browser", async () =>
 
 test("session source: login window capture is window, cf_set_cookies is manual, legacy file is null", async () => {
   const cfg = config();
-  const client = new WebClient(cfg, {
+  const client = new WebClient(cfg, { ...noDefault,
     browser: fakeBrowser([ck("SiteUserToken"), ck("SignedIn")]).b,
-    extract: async () => ({ cookies: [], browser: "chrome" }),
+    extractAll: async () => [{ cookies: [], browser: "chrome" }],
     loginPollMs: 1,
     loginMaxWaitMs: 5_000,
   });
@@ -140,16 +147,16 @@ test("session source: login window capture is window, cf_set_cookies is manual, 
 
   const legacy = config();
   writeFileSync(legacy.cookiesPath, JSON.stringify([ck("Old")]));
-  assert.equal(new WebClient(legacy, { browser: fakeBrowser([]).b }).sessionSource, null);
+  assert.equal(new WebClient(legacy, { ...noDefault, browser: fakeBrowser([]).b }).sessionSource, null);
 });
 
 test("logout: stops login polling, clears cookies everywhere, no silent re-extract until explicit sign-in", async () => {
   const cfg = config();
   writeFileSync(cfg.cookiesPath, JSON.stringify([ck("Old")]));
   const { b, log } = fakeBrowser([]); // login window never yields a session
-  const client = new WebClient(cfg, {
+  const client = new WebClient(cfg, { ...noDefault,
     browser: b,
-    extract: async () => ({ cookies: [ck("Anon")], browser: "chrome" }),
+    extractAll: async () => [{ cookies: [ck("Anon")], browser: "chrome" }],
     loginPollMs: 1,
     loginMaxWaitMs: 60_000,
   });
@@ -166,9 +173,9 @@ test("logout: stops login polling, clears cookies everywhere, no silent re-extra
   await client.logout(); // idempotent
 
   let extracts = 0;
-  const restarted = new WebClient(cfg, {
+  const restarted = new WebClient(cfg, { ...noDefault,
     browser: fakeBrowser([]).b,
-    extract: async () => (extracts++, { cookies: [ck("SignedIn")], browser: "chrome" }),
+    extractAll: async () => (extracts++, [{ cookies: [ck("SignedIn")], browser: "chrome" }]),
   });
   restarted.init();
   await new Promise((r) => setTimeout(r, 30));
@@ -184,10 +191,119 @@ test("logout: stops login polling, clears cookies everywhere, no silent re-extra
 
 test("logout then cf_set_cookies clears the signed-out marker", async () => {
   const cfg = config();
-  const client = new WebClient(cfg, { browser: fakeBrowser([]).b });
+  const client = new WebClient(cfg, { ...noDefault, browser: fakeBrowser([]).b });
   await client.logout();
   assert.equal(client.signedOut, true);
   client.setCookiesFromString("SignedIn=1");
   assert.equal(client.signedOut, false);
   assert.equal(client.sessionSource, "manual");
+});
+
+test("path 1: silent extract tries every browser, keeps the first signed-in one, logs each step", async () => {
+  const cfg = config();
+  const lines: string[] = [];
+  const orig = console.error;
+  console.error = (...a: unknown[]) => { lines.push(a.join(" ")); };
+  try {
+    const client = new WebClient(cfg, { ...noDefault,
+      browser: fakeBrowser([]).b,
+      extractAll: async () => [
+        { browser: "chrome", cookies: [], error: "app-bound encryption" },
+        { browser: "edge", cookies: [ck("Anon")] },
+        { browser: "firefox", cookies: [ck("SignedIn")] },
+      ],
+    });
+    const r = await client.autoExtractCookies();
+    assert.deepEqual(r, { message: "Extracted 1 cookies from firefox", loggedIn: true, loginStarted: false });
+    assert.equal(client.loginVia, "browser-extract");
+    assert.equal(client.loginBrowser, null);
+    assert.equal(client.sessionSource, "browser");
+    assert.equal(client.sessionBrowser, "firefox");
+  } finally {
+    console.error = orig;
+  }
+  const login = lines.filter((l) => l.startsWith("[login] "));
+  assert.ok(login.some((l) => /extract chrome: error \(app-bound encryption\)/.test(l)));
+  assert.ok(login.some((l) => /extract edge: 1 cookies, signed in: no/.test(l)));
+  assert.ok(login.some((l) => /extract firefox: 1 cookies, signed in: yes/.test(l)));
+  assert.ok(login.some((l) => /captured session: source browser\/firefox/.test(l)));
+});
+
+test("path 2: readable default browser gets the login page and is polled until signed in", async () => {
+  const cfg = config();
+  const { b, log } = fakeBrowser([]);
+  const opened: string[] = [];
+  let polls = 0;
+  const client = new WebClient(cfg, {
+    browser: b,
+    extractAll: async () => [],
+    detectDefaultBrowser: async () => ({ progId: "MSEdgeHTM", browser: "edge" }),
+    extractFrom: async (browser) => ({ browser, cookies: polls++ < 3 ? [ck("Anon")] : [ck("Anon"), ck("SignedIn")] }),
+    openUrl: async (url) => { opened.push(url); },
+    loginPollMs: 1,
+    loginMaxWaitMs: 5_000,
+  });
+  const r = await client.autoExtractCookies();
+  assert.equal(r.loggedIn, false);
+  assert.equal(r.loginStarted, true);
+  assert.match(r.message, /default browser \(edge\)/);
+  assert.deepEqual(opened, ["https://www.curseforge.com/login"]);
+  assert.equal(client.loginInProgress, true);
+  assert.equal(client.loginVia, "default-browser");
+  assert.equal(client.loginBrowser, "edge");
+  assert.ok(!log.includes("open"), "no server sign-in window");
+
+  await waitFor(() => !client.loginInProgress);
+  assert.equal(client.sessionSource, "browser");
+  assert.equal(client.sessionBrowser, "edge");
+  assert.deepEqual(JSON.parse(readFileSync(cfg.cookiesPath, "utf8")).map((c: CookieEntry) => c.name), ["Anon", "SignedIn"]);
+});
+
+test("path 3: unreadable default browser store falls back to the sign-in window", async () => {
+  const cfg = config();
+  const { b, log } = fakeBrowser([ck("SiteUserToken"), ck("SignedIn")]);
+  const client = new WebClient(cfg, {
+    browser: b,
+    extractAll: async () => [],
+    detectDefaultBrowser: async () => ({ progId: "ChromeHTML", browser: "chrome" }),
+    extractFrom: async (browser) => ({ browser, cookies: [], error: "app-bound encryption" }),
+    openUrl: async () => assert.fail("default browser must not be opened"),
+    loginPollMs: 1,
+    loginMaxWaitMs: 5_000,
+  });
+  const r = await client.autoExtractCookies();
+  assert.equal(r.loginStarted, true);
+  assert.equal(client.loginVia, "window");
+  assert.equal(client.loginBrowser, null);
+  assert.ok(log.includes("open"));
+  await waitFor(() => !client.loginInProgress);
+  assert.equal(client.sessionSource, "window");
+});
+
+test("cf_login_cancel: stops default-browser polling and closes the sign-in window", async () => {
+  const cfg = config();
+  const client = new WebClient(cfg, {
+    browser: fakeBrowser([]).b,
+    extractAll: async () => [],
+    detectDefaultBrowser: async () => ({ progId: "FirefoxURL-308046B0AF4A39CB", browser: "firefox" }),
+    extractFrom: async (browser) => ({ browser, cookies: [ck("Anon")] }),
+    openUrl: async () => {},
+    loginPollMs: 1,
+    loginMaxWaitMs: 60_000,
+  });
+  await client.autoExtractCookies();
+  assert.equal(client.loginInProgress, true);
+  assert.equal(await client.cancelLogin(), true);
+  assert.equal(client.loginInProgress, false);
+  assert.equal(await client.cancelLogin(), false);
+  assert.equal(client.hasCookies(), false);
+
+  const cfg2 = config();
+  const { b, log } = fakeBrowser([]);
+  const win = new WebClient(cfg2, { ...noDefault, browser: b, extractAll: async () => [], loginPollMs: 1, loginMaxWaitMs: 60_000 });
+  await win.autoExtractCookies();
+  assert.equal(win.loginVia, "window");
+  assert.equal(await win.cancelLogin(), true);
+  assert.equal(win.loginInProgress, false);
+  assert.ok(log.includes("close"), "sign-in window closed");
 });

@@ -60,7 +60,9 @@ export function registerWebApiTools(
     {
       title: "Auto-Extract Browser Cookies",
       description:
-        "Automatically extract curseforge.com session cookies from installed browsers. No user input needed.",
+        "Sign in to curseforge.com: (1) silently extract a signed-in session from installed browsers; " +
+        "(2) else open the login page in the default browser (if its cookie store is readable) and capture " +
+        "the session from it; (3) else open the server's own sign-in window. Returns immediately; poll cf_session_status.",
       inputSchema: { format: formatArg },
       annotations: {
         readOnlyHint: false,
@@ -71,16 +73,18 @@ export function registerWebApiTools(
     },
     async ({ format }) => {
       try {
-        const { message: result, loggedIn } = await client.autoExtractCookies();
+        const { message: result, loggedIn, loginStarted } = await client.autoExtractCookies();
         if (format === "json") {
           return jsonResult({
             result,
             cookiesStored: client.hasCookies(),
-            loginWindowOpened: /login window (has opened|is already open)/i.test(result),
+            loginWindowOpened: loginStarted,
             loggedIn,
             loginInProgress: client.loginInProgress,
             sessionSource: client.sessionSource,
             sessionBrowser: client.sessionBrowser,
+            loginVia: client.loginVia,
+            loginBrowser: client.loginBrowser,
           });
         }
         return success(`${result}\nSession active: ${client.hasCookies()}`);
@@ -115,6 +119,8 @@ export function registerWebApiTools(
             loginInProgress: client.loginInProgress,
             sessionSource: client.sessionSource,
             sessionBrowser: client.sessionBrowser,
+            loginVia: client.loginVia,
+            loginBrowser: client.loginBrowser,
           });
         }
         const who = s.user ? ` as ${s.user.displayName ?? "?"} (ID: ${s.user.id ?? "?"})` : "";
@@ -122,6 +128,31 @@ export function registerWebApiTools(
       } catch (e) {
         if (format === "json") return jsonError("cf_session_status", e);
         return error(`cf_session_status: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "cf_login_cancel",
+    {
+      title: "Cancel CurseForge Sign-In",
+      description: "Stop a running sign-in started by cf_auto_extract_cookies (default-browser polling or the sign-in window, which is closed).",
+      inputSchema: { format: formatArg },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ format }) => {
+      try {
+        const cancelled = await client.cancelLogin();
+        if (format === "json") return jsonResult({ cancelled });
+        return success(cancelled ? "Sign-in cancelled." : "No sign-in was in progress.");
+      } catch (e) {
+        if (format === "json") return jsonError("cf_login_cancel", e);
+        return error(`cf_login_cancel: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
   );
