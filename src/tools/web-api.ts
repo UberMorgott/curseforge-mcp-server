@@ -71,9 +71,15 @@ export function registerWebApiTools(
     },
     async ({ format }) => {
       try {
-        const result = await client.autoExtractCookies();
+        const { message: result, loggedIn } = await client.autoExtractCookies();
         if (format === "json") {
-          return jsonResult({ result, cookiesStored: client.hasCookies(), loginWindowOpened: /login window (has opened|is already open)/i.test(result) });
+          return jsonResult({
+            result,
+            cookiesStored: client.hasCookies(),
+            loginWindowOpened: /login window (has opened|is already open)/i.test(result),
+            loggedIn,
+            loginInProgress: client.loginInProgress,
+          });
         }
         return success(`${result}\nSession active: ${client.hasCookies()}`);
       } catch (e) {
@@ -100,7 +106,7 @@ export function registerWebApiTools(
     async ({ format }) => {
       try {
         const s = await client.sessionStatus();
-        if (format === "json") return jsonResult({ ...s, cookiesStored: client.hasCookies() });
+        if (format === "json") return jsonResult({ ...s, cookiesStored: client.hasCookies(), loginInProgress: client.loginInProgress });
         const who = s.user ? ` as ${s.user.displayName ?? "?"} (ID: ${s.user.id ?? "?"})` : "";
         return success(`${s.loggedIn ? "Logged in" : "NOT logged in"}${who} (${s.detail}); cookies stored: ${client.hasCookies()}`);
       } catch (e) {

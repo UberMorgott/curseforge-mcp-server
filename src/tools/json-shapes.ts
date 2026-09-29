@@ -118,12 +118,15 @@ export const SessionResultSchema = z.object({
   cookiesStored: z.boolean(),
   user: z.object({ id: z.number().nullable(), displayName: z.string().nullable(), username: z.string().nullable() }).nullable(),
   detail: z.string(),
+  loginInProgress: z.boolean(),
 });
 
 export const ExtractResultSchema = z.object({
   result: z.string(),
   cookiesStored: z.boolean(),
   loginWindowOpened: z.boolean(),
+  loggedIn: z.boolean(),
+  loginInProgress: z.boolean(),
 });
 
 const norm = (s: string) => stripHtml(s).replace(/^In reply to [^:]*:/i, "").replace(/\s+/g, " ").trim();

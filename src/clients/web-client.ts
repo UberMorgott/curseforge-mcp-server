@@ -2,20 +2,49 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { CookieEntry } from "../utils/types.js";
-import { CookieExtractor } from "./cookie-extractor.js";
+import { CookieExtractor, type ExtractionResult } from "./cookie-extractor.js";
 import { BrowserClient } from "./browser-client.js";
+
+/** The BrowserClient surface WebClient uses (test seam). */
+export type WebBrowser = Pick<BrowserClient, "setCookies" | "getCookies" | "openLoginPage" | "close" | "request">;
+
+/** Optional dependencies, overridable in tests (no real browser / network). */
+export interface WebClientDeps {
+  browser?: WebBrowser;
+  extract?: () => Promise<ExtractionResult>;
+  loginPollMs?: number;
+  loginMaxWaitMs?: number;
+}
+
+export interface AutoExtractResult {
+  message: string;
+  /** Session check result right after extraction (false when the login window was opened instead). */
+  loggedIn: boolean;
+}
 
 export class WebClient {
   private cookies: CookieEntry[] = [];
   private config: Config;
-  private browser: BrowserClient;
+  private browser: WebBrowser;
+  private extract: () => Promise<ExtractionResult>;
+  private loginPollMs: number;
+  private loginMaxWaitMs: number;
   private loginAttempted = false;
   private loginPolling = false;
 
-  constructor(config: Config) {
+  constructor(config: Config, deps: WebClientDeps = {}) {
     this.config = config;
-    this.browser = new BrowserClient();
+    this.browser = deps.browser ?? new BrowserClient();
+    this.extract = deps.extract ?? (() => new CookieExtractor().extractCookies());
+    this.loginPollMs = deps.loginPollMs ?? 3_000;
+    // Generous: users with 2FA / Google sign-in need several minutes.
+    this.loginMaxWaitMs = deps.loginMaxWaitMs ?? 600_000;
     this.loadCookies();
+  }
+
+  /** True while the visible login window is open and being polled for a session. */
+  get loginInProgress(): boolean {
+    return this.loginPolling;
   }
 
   /** Non-blocking startup: push on-disk cookies to the browser immediately, and
@@ -33,7 +62,7 @@ export class WebClient {
   /** Silent @rookie-rs extraction for startup; no login window, no throw. */
   private async backgroundExtract(): Promise<void> {
     try {
-      const result = await new CookieExtractor().extractCookies();
+      const result = await this.extract();
       if (result.cookies.length > 0) {
         this.cookies = result.cookies;
         this.browser.setCookies(result.cookies);
@@ -107,23 +136,37 @@ export class WebClient {
     return this.cookies.length > 0;
   }
 
-  async autoExtractCookies(): Promise<string> {
+  /** Extract system-browser cookies and keep them only if they carry a signed-in
+   *  session (anonymous visit cookies don't). Otherwise restore the previous cookies
+   *  and open the login window. */
+  async autoExtractCookies(): Promise<AutoExtractResult> {
     try {
-      const extractor = new CookieExtractor();
-      const result = await extractor.extractCookies();
+      const result = await this.extract();
       if (result.cookies.length > 0) {
+        const previous = this.cookies;
         this.cookies = result.cookies;
         this.browser.setCookies(result.cookies);
-        this.saveCookies();
-        return `Extracted ${result.cookies.length} cookies from ${result.browser}`;
+        let status: { loggedIn: boolean; detail: string };
+        try {
+          status = await this.sessionStatus();
+        } catch (e) {
+          status = { loggedIn: false, detail: e instanceof Error ? e.message : String(e) };
+        }
+        if (status.loggedIn) {
+          this.saveCookies();
+          return { message: `Extracted ${result.cookies.length} cookies from ${result.browser}`, loggedIn: true };
+        }
+        console.error(`[web-client] Extracted cookies from ${result.browser} are not signed in (${status.detail}); opening login.`);
+        this.cookies = previous;
+        this.browser.setCookies(previous);
       }
-      // @rookie-rs found nothing (e.g. App-Bound Encryption on Windows Chrome 127+).
-      // Fall back to the reliable in-browser login that works on any OS.
-      return await this.browserLogin();
+      // Nothing usable (no cookies, App-Bound Encryption on Windows Chrome 127+, or
+      // an anonymous session). Fall back to the in-browser login that works on any OS.
+      return { message: await this.browserLogin(), loggedIn: false };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[web-client] Auto-extract failed: ${msg}`);
-      return `Auto-extraction failed: ${msg}`;
+      return { message: `Auto-extraction failed: ${msg}`, loggedIn: false };
     }
   }
 
@@ -160,8 +203,8 @@ export class WebClient {
   /** Background poll: watch the dedicated browser's cookies for an auth cookie
    *  after the user logs in, then persist the session. Never blocks a request. */
   private async pollForLogin(): Promise<void> {
-    const maxWait = 120_000;
-    const pollInterval = 3_000;
+    const maxWait = this.loginMaxWaitMs;
+    const pollInterval = this.loginPollMs;
     const start = Date.now();
 
     try {
@@ -180,7 +223,7 @@ export class WebClient {
           return;
         }
       }
-      console.error("[web-client] Login wait timed out (2 min).");
+      console.error(`[web-client] Login wait timed out (${Math.round(maxWait / 1000)} s).`);
     } catch (e) {
       console.error(`[web-client] Login window lost: ${e instanceof Error ? e.message : e}`);
     } finally {

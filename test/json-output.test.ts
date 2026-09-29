@@ -107,8 +107,8 @@ test("json envelope and error codes", () => {
   assert.equal(errorCode(new Error("HTTP 429: x")), "rate_limited");
   assert.equal(errorCode(new Error("boom")), "error");
   PostResultSchema.parse({ posted: true, id: null, parentId: "1", verified: false });
-  SessionResultSchema.parse({ loggedIn: true, cookiesStored: true, user: { id: 1, displayName: "M", username: "m" }, detail: "session valid" });
-  ExtractResultSchema.parse({ result: "Extracted 12 cookies from chrome", cookiesStored: true, loginWindowOpened: false });
+  SessionResultSchema.parse({ loggedIn: true, cookiesStored: true, user: { id: 1, displayName: "M", username: "m" }, detail: "session valid", loginInProgress: false });
+  ExtractResultSchema.parse({ result: "Extracted 12 cookies from chrome", cookiesStored: true, loginWindowOpened: false, loggedIn: true, loginInProgress: false });
 });
 
 test("post_comment: a failed write is outcome_unknown unless the site refused it (4xx)", () => {

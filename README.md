@@ -193,8 +193,8 @@ ISO-8601 UTC or `null`.
 | `get_project` | `{id, title, summary, game, type, url, createdAt, downloads, members:[{id, username, title}]}` |
 | `get_comments` | `{modId, page, pages, pageSize:20, total, comments:[{id, parentId:null, author, authorId, authorUsername, createdAt, updatedAt, body, bodyHtml, pinned, replies:[{id, parentId, depth, author, authorId, authorUsername, createdAt, updatedAt, body, bodyHtml}]}]}` — root threads newest first; every nested reply flattened depth-first with its `parentId` (`depth` 1 = reply to the root); 20 entries per page **counting replies**, `total` = entries; a new reply on an old thread stays on that thread's page, so a sync must walk all `pages`. `body` = site plain text, `bodyHtml` = rendered HTML; `updatedAt` = `dateEdited` |
 | `post_comment` | `{posted:true, id, parentId, verified}` — `id` from the response if it has one, else read back (first 3 pages, same text + same parent, newest); `verified:false, id:null` if not found |
-| `cf_session_status` | `{loggedIn, cookiesStored, user:{id, displayName, username} \| null, detail}` — the site's own `GET /api/v1/users/profile`; never opens a login window |
-| `cf_auto_extract_cookies` | `{result, cookiesStored, loginWindowOpened}` |
+| `cf_session_status` | `{loggedIn, cookiesStored, user:{id, displayName, username} \| null, detail, loginInProgress}` — the site's own `GET /api/v1/users/profile`; never opens a login window; `loginInProgress` = the login window is still open and being watched |
+| `cf_auto_extract_cookies` | `{result, cookiesStored, loginWindowOpened, loggedIn, loginInProgress}` — extracted browser cookies are kept only if the session check says signed in (`loggedIn:true`); anonymous cookies are discarded (previous ones restored) and the login window opens instead. The window waits up to 10 min for sign-in (2FA/Google), then closes; poll `cf_session_status` until `loggedIn` |
 
 Errors (`isError: true`): `structuredContent = {error:{code, message}}`, `code` ∈
 `not_logged_in` (no cookies / HTTP 401), `cloudflare` (HTTP 403 after the challenge retry),
