@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { CookieEntry } from "../utils/types.js";
@@ -6,7 +6,19 @@ import { CookieExtractor, type ExtractionResult } from "./cookie-extractor.js";
 import { BrowserClient } from "./browser-client.js";
 
 /** The BrowserClient surface WebClient uses (test seam). */
-export type WebBrowser = Pick<BrowserClient, "setCookies" | "getCookies" | "openLoginPage" | "close" | "request">;
+export type WebBrowser = Pick<BrowserClient, "setCookies" | "getCookies" | "openLoginPage" | "close" | "request" | "clearSession">;
+
+/** Where the stored session came from: an installed browser's cookie store, the visible
+ *  sign-in window, cf_set_cookies, or unknown (legacy cookies file without a sidecar). */
+export type SessionSource = "browser" | "window" | "manual" | null;
+
+/** Sidecar next to the cookies file (`session.json`); survives restarts. */
+interface SessionMeta {
+  source: SessionSource;
+  browser: string | null;
+  /** Set by logout: startup must not silently re-extract browser cookies. */
+  signedOut: boolean;
+}
 
 /** Optional dependencies, overridable in tests (no real browser / network). */
 export interface WebClientDeps {
@@ -31,6 +43,10 @@ export class WebClient {
   private loginMaxWaitMs: number;
   private loginAttempted = false;
   private loginPolling = false;
+  /** Bumped by logout so a running login poll stops without saving. */
+  private loginGeneration = 0;
+  private loginTask: Promise<void> | null = null;
+  private meta: SessionMeta = { source: null, browser: null, signedOut: false };
 
   constructor(config: Config, deps: WebClientDeps = {}) {
     this.config = config;
@@ -40,11 +56,55 @@ export class WebClient {
     // Generous: users with 2FA / Google sign-in need several minutes.
     this.loginMaxWaitMs = deps.loginMaxWaitMs ?? 600_000;
     this.loadCookies();
+    this.loadMeta();
   }
 
   /** True while the visible login window is open and being polled for a session. */
   get loginInProgress(): boolean {
     return this.loginPolling;
+  }
+
+  /** Origin of the stored session (null when no cookies are stored or it is unknown). */
+  get sessionSource(): SessionSource {
+    return this.hasCookies() ? this.meta.source : null;
+  }
+
+  /** Browser the cookies were extracted from, when the source is "browser". */
+  get sessionBrowser(): string | null {
+    return this.sessionSource === "browser" ? this.meta.browser : null;
+  }
+
+  /** True after logout until the next explicit sign-in (auto-extract / set cookies / window). */
+  get signedOut(): boolean {
+    return this.meta.signedOut;
+  }
+
+  private get metaPath(): string {
+    return path.join(path.dirname(this.config.cookiesPath), "session.json");
+  }
+
+  private loadMeta(): void {
+    if (!existsSync(this.metaPath)) return;
+    try {
+      const m = JSON.parse(readFileSync(this.metaPath, "utf-8"));
+      const source = ["browser", "window", "manual"].includes(m?.source) ? (m.source as SessionSource) : null;
+      this.meta = { source, browser: typeof m?.browser === "string" ? m.browser : null, signedOut: m?.signedOut === true };
+    } catch {
+      // unreadable sidecar = unknown source
+    }
+  }
+
+  private saveMeta(meta: SessionMeta): void {
+    this.meta = meta;
+    const dir = path.dirname(this.metaPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(this.metaPath, JSON.stringify(meta, null, 2));
+  }
+
+  /** Persist cookies together with where they came from (clears the signed-out marker). */
+  private saveSession(source: Exclude<SessionSource, null>, browser: string | null = null): void {
+    this.saveCookies();
+    this.saveMeta({ source, browser: source === "browser" ? browser : null, signedOut: false });
   }
 
   /** Non-blocking startup: push on-disk cookies to the browser immediately, and
@@ -54,7 +114,8 @@ export class WebClient {
    *  login happens only via the cf_auto_extract_cookies tool or on a 401. */
   init(): void {
     this.browser.setCookies(this.cookies);
-    if (!this.hasCookies()) {
+    // After an explicit logout, stay signed out until the user signs in again.
+    if (!this.hasCookies() && !this.meta.signedOut) {
       void this.backgroundExtract();
     }
   }
@@ -66,7 +127,7 @@ export class WebClient {
       if (result.cookies.length > 0) {
         this.cookies = result.cookies;
         this.browser.setCookies(result.cookies);
-        this.saveCookies();
+        this.saveSession("browser", result.browser);
         console.error(
           `[web-client] Extracted ${result.cookies.length} cookies from ${result.browser}`,
         );
@@ -92,7 +153,7 @@ export class WebClient {
   setCookies(cookies: CookieEntry[]): void {
     this.cookies = cookies;
     this.browser.setCookies(cookies);
-    this.saveCookies();
+    this.saveSession("manual");
   }
 
   setCookiesFromString(cookieString: string): void {
@@ -114,7 +175,7 @@ export class WebClient {
 
     this.cookies = entries;
     this.browser.setCookies(entries);
-    this.saveCookies();
+    this.saveSession("manual");
   }
 
   private saveCookies(): void {
@@ -140,6 +201,8 @@ export class WebClient {
    *  session (anonymous visit cookies don't). Otherwise restore the previous cookies
    *  and open the login window. */
   async autoExtractCookies(): Promise<AutoExtractResult> {
+    // An explicit sign-in request ends the signed-out state from cf_logout.
+    if (this.meta.signedOut) this.saveMeta({ ...this.meta, signedOut: false });
     try {
       const result = await this.extract();
       if (result.cookies.length > 0) {
@@ -153,7 +216,7 @@ export class WebClient {
           status = { loggedIn: false, detail: e instanceof Error ? e.message : String(e) };
         }
         if (status.loggedIn) {
-          this.saveCookies();
+          this.saveSession("browser", result.browser);
           return { message: `Extracted ${result.cookies.length} cookies from ${result.browser}`, loggedIn: true };
         }
         console.error(`[web-client] Extracted cookies from ${result.browser} are not signed in (${status.detail}); opening login.`);
@@ -188,9 +251,14 @@ export class WebClient {
     }
 
     this.loginPolling = true;
-    void this.pollForLogin().finally(() => {
-      this.loginPolling = false;
+    const gen = this.loginGeneration;
+    const task = this.pollForLogin(gen).finally(() => {
+      if (this.loginTask === task) {
+        this.loginTask = null;
+        this.loginPolling = false;
+      }
     });
+    this.loginTask = task;
 
     return (
       "A CurseForge login window has opened. Log in there — your session is captured " +
@@ -202,22 +270,25 @@ export class WebClient {
 
   /** Background poll: watch the dedicated browser's cookies for an auth cookie
    *  after the user logs in, then persist the session. Never blocks a request. */
-  private async pollForLogin(): Promise<void> {
+  private async pollForLogin(gen: number): Promise<void> {
     const maxWait = this.loginMaxWaitMs;
     const pollInterval = this.loginPollMs;
     const start = Date.now();
+    const cancelled = () => gen !== this.loginGeneration;
 
     try {
       while (Date.now() - start < maxWait) {
         await new Promise((r) => setTimeout(r, pollInterval));
+        if (cancelled()) return; // logout: the window is closed by logout itself
         const cookies = await this.browser.getCookies();
+        if (cancelled()) return;
         const hasAuth = cookies.some(
           (c) => c.name === "SiteUserToken" || c.name === "User" || c.name === "SiteSID",
         );
         if (hasAuth) {
           this.cookies = cookies;
           this.browser.setCookies(cookies);
-          this.saveCookies();
+          this.saveSession("window");
           this.loginAttempted = false; // allow a future 401 to re-trigger login
           console.error(`[web-client] Login detected — ${cookies.length} cookies saved.`);
           return;
@@ -225,11 +296,36 @@ export class WebClient {
       }
       console.error(`[web-client] Login wait timed out (${Math.round(maxWait / 1000)} s).`);
     } catch (e) {
-      console.error(`[web-client] Login window lost: ${e instanceof Error ? e.message : e}`);
+      if (!cancelled()) console.error(`[web-client] Login window lost: ${e instanceof Error ? e.message : e}`);
     } finally {
       // Close the visible login window; the next request relaunches the hidden browser
-      // on the same persistent profile, so the new session carries over.
-      await this.browser.close();
+      // on the same persistent profile, so the new session carries over. After logout
+      // the browser belongs to logout (it may already be clearing the profile).
+      if (!cancelled()) await this.browser.close();
+    }
+  }
+
+  /** Sign out: stop the login window, forget the cookies (memory, cookies file, live
+   *  browser profile) and persist a signed-out marker so startup does not silently
+   *  re-extract browser cookies until the next explicit sign-in. Idempotent. */
+  async logout(): Promise<void> {
+    this.loginGeneration++;
+    const task = this.loginTask;
+    this.loginTask = null;
+    this.loginPolling = false;
+    this.loginAttempted = false;
+    if (task) {
+      await this.browser.close(); // closes the visible login window
+      await task;
+    }
+    this.cookies = [];
+    rmSync(this.config.cookiesPath, { force: true });
+    this.saveMeta({ source: null, browser: null, signedOut: true });
+    try {
+      await this.browser.clearSession();
+    } catch (e) {
+      // No browser available = no persistent profile session to clear.
+      console.error(`[web-client] Could not clear the browser profile session: ${e instanceof Error ? e.message : e}`);
     }
   }
 
@@ -253,7 +349,7 @@ export class WebClient {
         if (hasAuth) {
           this.cookies = cookies;
           this.browser.setCookies(cookies);
-          this.saveCookies();
+          this.saveSession("window");
           console.error(`[setup] Login detected — ${cookies.length} cookies saved.`);
           return true;
         }

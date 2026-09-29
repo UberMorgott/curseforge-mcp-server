@@ -31,6 +31,7 @@ function fakeBrowser(loginCookies: CookieEntry[]) {
     async openLoginPage() { log.push("open"); },
     async getCookies() { return loginCookies; },
     async close() { log.push("close"); },
+    async clearSession() { current = []; log.push("clear"); },
   };
   return { b, log };
 }
@@ -94,4 +95,99 @@ test("signed-in extracted cookies: kept, no login window", async () => {
   assert.equal(client.loginInProgress, false);
   assert.ok(!log.includes("open"));
   assert.deepEqual(JSON.parse(readFileSync(cfg.cookiesPath, "utf8")).map((c: CookieEntry) => c.name), ["SignedIn"]);
+});
+
+const metaOf = (cfg: Config) => JSON.parse(readFileSync(path.join(cfg.authDir, "session.json"), "utf8"));
+
+test("session source: browser extract persists browser name across restarts", async () => {
+  const cfg = config();
+  const client = new WebClient(cfg, { browser: fakeBrowser([]).b, extract: async () => ({ cookies: [ck("SignedIn")], browser: "firefox" }) });
+  await client.autoExtractCookies();
+  assert.equal(client.sessionSource, "browser");
+  assert.equal(client.sessionBrowser, "firefox");
+  const again = new WebClient(cfg, { browser: fakeBrowser([]).b, extract: async () => assert.fail("no extract with stored cookies") });
+  again.init();
+  assert.equal(again.sessionSource, "browser");
+  assert.equal(again.sessionBrowser, "firefox");
+});
+
+test("session source: startup background extract counts as browser", async () => {
+  const cfg = config();
+  const client = new WebClient(cfg, { browser: fakeBrowser([]).b, extract: async () => ({ cookies: [ck("SignedIn")], browser: "edge" }) });
+  client.init();
+  await waitFor(() => client.hasCookies());
+  await waitFor(() => existsSync(path.join(cfg.authDir, "session.json")));
+  assert.equal(client.sessionSource, "browser");
+  assert.equal(client.sessionBrowser, "edge");
+});
+
+test("session source: login window capture is window, cf_set_cookies is manual, legacy file is null", async () => {
+  const cfg = config();
+  const client = new WebClient(cfg, {
+    browser: fakeBrowser([ck("SiteUserToken"), ck("SignedIn")]).b,
+    extract: async () => ({ cookies: [], browser: "chrome" }),
+    loginPollMs: 1,
+    loginMaxWaitMs: 5_000,
+  });
+  await client.autoExtractCookies();
+  await waitFor(() => !client.loginInProgress);
+  assert.equal(client.sessionSource, "window");
+  assert.equal(client.sessionBrowser, null);
+
+  client.setCookiesFromString("SignedIn=1; Other=2");
+  assert.equal(client.sessionSource, "manual");
+  assert.deepEqual(metaOf(cfg), { source: "manual", browser: null, signedOut: false });
+
+  const legacy = config();
+  writeFileSync(legacy.cookiesPath, JSON.stringify([ck("Old")]));
+  assert.equal(new WebClient(legacy, { browser: fakeBrowser([]).b }).sessionSource, null);
+});
+
+test("logout: stops login polling, clears cookies everywhere, no silent re-extract until explicit sign-in", async () => {
+  const cfg = config();
+  writeFileSync(cfg.cookiesPath, JSON.stringify([ck("Old")]));
+  const { b, log } = fakeBrowser([]); // login window never yields a session
+  const client = new WebClient(cfg, {
+    browser: b,
+    extract: async () => ({ cookies: [ck("Anon")], browser: "chrome" }),
+    loginPollMs: 1,
+    loginMaxWaitMs: 60_000,
+  });
+  await client.autoExtractCookies();
+  assert.ok(client.loginInProgress);
+
+  await client.logout();
+  assert.equal(client.loginInProgress, false);
+  assert.equal(client.hasCookies(), false);
+  assert.equal(client.sessionSource, null);
+  assert.equal(existsSync(cfg.cookiesPath), false, "cookies file deleted");
+  assert.ok(log.includes("clear"), "live browser profile cookies cleared");
+  assert.deepEqual(metaOf(cfg), { source: null, browser: null, signedOut: true });
+  await client.logout(); // idempotent
+
+  let extracts = 0;
+  const restarted = new WebClient(cfg, {
+    browser: fakeBrowser([]).b,
+    extract: async () => (extracts++, { cookies: [ck("SignedIn")], browser: "chrome" }),
+  });
+  restarted.init();
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(extracts, 0, "startup must not re-extract after logout");
+  assert.equal(restarted.hasCookies(), false);
+
+  const r = await restarted.autoExtractCookies();
+  assert.equal(r.loggedIn, true);
+  assert.equal(extracts, 1);
+  assert.equal(restarted.signedOut, false);
+  assert.deepEqual(metaOf(cfg), { source: "browser", browser: "chrome", signedOut: false });
+});
+
+test("logout then cf_set_cookies clears the signed-out marker", async () => {
+  const cfg = config();
+  const client = new WebClient(cfg, { browser: fakeBrowser([]).b });
+  await client.logout();
+  assert.equal(client.signedOut, true);
+  client.setCookiesFromString("SignedIn=1");
+  assert.equal(client.signedOut, false);
+  assert.equal(client.sessionSource, "manual");
 });

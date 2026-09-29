@@ -113,12 +113,17 @@ export const PostResultSchema = z.object({
   verified: z.boolean(),
 });
 
+/** Where the stored web session came from (null = none stored / unknown legacy file). */
+export const SessionSourceSchema = z.enum(["browser", "window", "manual"]).nullable();
+
 export const SessionResultSchema = z.object({
   loggedIn: z.boolean(),
   cookiesStored: z.boolean(),
   user: z.object({ id: z.number().nullable(), displayName: z.string().nullable(), username: z.string().nullable() }).nullable(),
   detail: z.string(),
   loginInProgress: z.boolean(),
+  sessionSource: SessionSourceSchema,
+  sessionBrowser: z.string().nullable(),
 });
 
 export const ExtractResultSchema = z.object({
@@ -127,6 +132,13 @@ export const ExtractResultSchema = z.object({
   loginWindowOpened: z.boolean(),
   loggedIn: z.boolean(),
   loginInProgress: z.boolean(),
+  sessionSource: SessionSourceSchema,
+  sessionBrowser: z.string().nullable(),
+});
+
+export const LogoutResultSchema = z.object({
+  loggedOut: z.literal(true),
+  cookiesStored: z.literal(false),
 });
 
 const norm = (s: string) => stripHtml(s).replace(/^In reply to [^:]*:/i, "").replace(/\s+/g, " ").trim();

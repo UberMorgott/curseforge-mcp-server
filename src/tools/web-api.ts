@@ -79,6 +79,8 @@ export function registerWebApiTools(
             loginWindowOpened: /login window (has opened|is already open)/i.test(result),
             loggedIn,
             loginInProgress: client.loginInProgress,
+            sessionSource: client.sessionSource,
+            sessionBrowser: client.sessionBrowser,
           });
         }
         return success(`${result}\nSession active: ${client.hasCookies()}`);
@@ -106,12 +108,48 @@ export function registerWebApiTools(
     async ({ format }) => {
       try {
         const s = await client.sessionStatus();
-        if (format === "json") return jsonResult({ ...s, cookiesStored: client.hasCookies(), loginInProgress: client.loginInProgress });
+        if (format === "json") {
+          return jsonResult({
+            ...s,
+            cookiesStored: client.hasCookies(),
+            loginInProgress: client.loginInProgress,
+            sessionSource: client.sessionSource,
+            sessionBrowser: client.sessionBrowser,
+          });
+        }
         const who = s.user ? ` as ${s.user.displayName ?? "?"} (ID: ${s.user.id ?? "?"})` : "";
         return success(`${s.loggedIn ? "Logged in" : "NOT logged in"}${who} (${s.detail}); cookies stored: ${client.hasCookies()}`);
       } catch (e) {
         if (format === "json") return jsonError("cf_session_status", e);
         return error(`cf_session_status: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "cf_logout",
+    {
+      title: "Sign Out of CurseForge",
+      description:
+        "Sign out: close the login window, delete the stored session cookies and clear them from the " +
+        "dedicated browser profile. Startup will not re-extract browser cookies until the next " +
+        "cf_auto_extract_cookies or cf_set_cookies.",
+      inputSchema: { format: formatArg },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ format }) => {
+      try {
+        await client.logout();
+        if (format === "json") return jsonResult({ loggedOut: true, cookiesStored: client.hasCookies() });
+        return success("Signed out of CurseForge; session cookies cleared.");
+      } catch (e) {
+        if (format === "json") return jsonError("cf_logout", e);
+        return error(`cf_logout: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
   );

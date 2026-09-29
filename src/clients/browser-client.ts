@@ -112,6 +112,17 @@ export class BrowserClient {
     await this.navigateAndWaitForCf(this.mainPage, url);
   }
 
+  /** Sign out of the dedicated persistent profile: forget in-memory cookies and delete
+   *  every curseforge.com cookie from the live context (launching it headless if needed),
+   *  so the profile does not bring the session back on the next launch. */
+  async clearSession(): Promise<void> {
+    this.cookies = [];
+    this.clearIdleTimer();
+    await this.ensureInit();
+    await this.context?.clearCookies({ domain: /(^|\.)curseforge\.com$/ });
+    this.resetIdleTimer();
+  }
+
   async close(): Promise<void> {
     this.clearIdleTimer();
     const pending = this.initPromise;
