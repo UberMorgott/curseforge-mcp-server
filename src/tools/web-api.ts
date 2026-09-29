@@ -3,6 +3,8 @@ import { z } from "zod/v4";
 import type { WebClient } from "../clients/web-client.js";
 import { formatCommentThread, compact, truncate } from "../utils/helpers.js";
 import { success, error } from "../utils/types.js";
+import { formatArg, jsonResult, jsonError, CodedError } from "../utils/structured.js";
+import { commentsJson, findPosted } from "./json-shapes.js";
 
 const CF_BASE = "https://www.curseforge.com";
 const AUTHORS_API = "https://authors.curseforge.com/_api";
@@ -59,7 +61,7 @@ export function registerWebApiTools(
       title: "Auto-Extract Browser Cookies",
       description:
         "Automatically extract curseforge.com session cookies from installed browsers. No user input needed.",
-      inputSchema: {},
+      inputSchema: { format: formatArg },
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -67,12 +69,43 @@ export function registerWebApiTools(
         openWorldHint: false,
       },
     },
-    async () => {
+    async ({ format }) => {
       try {
         const result = await client.autoExtractCookies();
+        if (format === "json") {
+          return jsonResult({ result, cookiesStored: client.hasCookies(), loginWindowOpened: /login window (has opened|is already open)/i.test(result) });
+        }
         return success(`${result}\nSession active: ${client.hasCookies()}`);
       } catch (e) {
+        if (format === "json") return jsonError("auto_extract", e);
         return error(`auto_extract: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+  );
+
+  server.registerTool(
+    "cf_session_status",
+    {
+      title: "Web Session Status",
+      description:
+        "Check whether the stored curseforge.com session is signed in (the site's own profile call). Never opens a login window.",
+      inputSchema: { format: formatArg },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ format }) => {
+      try {
+        const s = await client.sessionStatus();
+        if (format === "json") return jsonResult({ ...s, cookiesStored: client.hasCookies() });
+        const who = s.user ? ` as ${s.user.displayName ?? "?"} (ID: ${s.user.id ?? "?"})` : "";
+        return success(`${s.loggedIn ? "Logged in" : "NOT logged in"}${who} (${s.detail}); cookies stored: ${client.hasCookies()}`);
+      } catch (e) {
+        if (format === "json") return jsonError("cf_session_status", e);
+        return error(`cf_session_status: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
   );
@@ -85,6 +118,7 @@ export function registerWebApiTools(
       inputSchema: {
         mod_id: z.number().describe("CurseForge mod/project ID"),
         page: z.number().int().min(1).optional().default(1).describe("1-based page number"),
+        format: formatArg,
       },
       annotations: {
         readOnlyHint: true,
@@ -93,7 +127,16 @@ export function registerWebApiTools(
         openWorldHint: true,
       },
     },
-    async ({ mod_id, page }) => {
+    async ({ mod_id, page, format }) => {
+      if (format === "json") {
+        try {
+          if (!client.hasCookies()) throw new CodedError("not_logged_in", "No session cookies. Use cf_auto_extract_cookies first.");
+          const data = await client.getQuiet(`${CF_BASE}/api/v1/mods/${mod_id}/comments?page=${page - 1}`);
+          return jsonResult(commentsJson(mod_id, page, data));
+        } catch (e) {
+          return jsonError("get_comments", e);
+        }
+      }
       if (!client.hasCookies()) return error("No session cookies. Use cf_auto_extract_cookies first.");
       try {
         // The endpoint only honors a 0-based `page`; index/pageSize are ignored and size is fixed.
@@ -121,6 +164,7 @@ export function registerWebApiTools(
         mod_id: z.number().describe("CurseForge mod/project ID"),
         comment_text: z.string().describe("Comment text"),
         reply_to_id: z.number().optional().describe("Comment ID to reply to"),
+        format: formatArg,
       },
       annotations: {
         readOnlyHint: false,
@@ -129,7 +173,30 @@ export function registerWebApiTools(
         openWorldHint: true,
       },
     },
-    async ({ mod_id, comment_text, reply_to_id }) => {
+    async ({ mod_id, comment_text, reply_to_id, format }) => {
+      if (format === "json") {
+        try {
+          if (!client.hasCookies()) throw new CodedError("not_logged_in", "No session cookies. Use cf_auto_extract_cookies first.");
+          const body: Record<string, unknown> = { entityId: mod_id, body: comment_text, bodyType: "RawHtml" };
+          if (reply_to_id !== undefined) body.parentId = reply_to_id;
+          const res = await client.postQuiet(`${CF_BASE}/api/v1/comments`, body);
+          const direct = res && typeof res === "object" ? (res.id ?? res.data?.id) : undefined;
+          let id: string | null = direct != null ? String(direct) : null;
+          if (id === null) {
+            // No id in the answer: read back (newest first, up to 3 pages) and match the text.
+            const pages: any[] = [];
+            for (let p = 0; p < 3 && id === null; p++) {
+              const d = await client.getQuiet(`${CF_BASE}/api/v1/mods/${mod_id}/comments?page=${p}`).catch(() => null);
+              if (!d?.data?.length) break;
+              pages.push(d);
+              id = findPosted(pages, comment_text, reply_to_id);
+            }
+          }
+          return jsonResult({ posted: true, id, parentId: reply_to_id !== undefined ? String(reply_to_id) : null, verified: id !== null });
+        } catch (e) {
+          return jsonError("post_comment", e);
+        }
+      }
       if (!client.hasCookies()) return error("No session cookies. Use cf_auto_extract_cookies first.");
       try {
         const body: Record<string, unknown> = {

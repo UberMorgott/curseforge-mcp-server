@@ -19,6 +19,8 @@ import {
   compact,
 } from "../utils/helpers.js";
 import { success, error } from "../utils/types.js";
+import { formatArg, jsonResult, jsonError } from "../utils/structured.js";
+import { authorJson, projectJson } from "./json-shapes.js";
 
 export function registerCoreApiTools(
   server: McpServer,
@@ -420,6 +422,7 @@ export function registerCoreApiTools(
         'Get CurseForge project info by numeric ID or path (e.g. "238222" or "minecraft/mc-mods/jei"). Works without API key via CFWidget.',
       inputSchema: {
         project: z.union([z.string(), z.number()]).describe('Project ID or path, e.g. "238222" or "minecraft/mc-mods/jei"'),
+        format: formatArg,
       },
       annotations: {
         readOnlyHint: true,
@@ -428,11 +431,13 @@ export function registerCoreApiTools(
         openWorldHint: true,
       },
     },
-    async ({ project }) => {
+    async ({ project, format }) => {
       try {
         const data = await cfwidget.getProject(String(project));
+        if (format === "json") return jsonResult(projectJson(data));
         return success(formatProject(data));
       } catch (e) {
+        if (format === "json") return jsonError("get_project", e);
         return error(`get_project: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
@@ -446,6 +451,7 @@ export function registerCoreApiTools(
         "Find a CurseForge author by username and list their projects. Works without API key via CFWidget.",
       inputSchema: {
         username: z.string().describe("Author username to search"),
+        format: formatArg,
       },
       annotations: {
         readOnlyHint: true,
@@ -454,13 +460,15 @@ export function registerCoreApiTools(
         openWorldHint: true,
       },
     },
-    async ({ username }) => {
+    async ({ username, format }) => {
       try {
         const data = await cfwidget.searchAuthor(username);
+        if (format === "json") return jsonResult(authorJson(data));
         const projects = data.projects || [];
         const lines = projects.map((p: any) => `[${p.id}] ${p.name}`);
         return success(`Author: ${data.username} (ID: ${data.id})\nProjects (${projects.length}):\n${lines.join("\n")}`);
       } catch (e) {
+        if (format === "json") return jsonError("search_author", e);
         return error(`search_author: ${e instanceof Error ? e.message : String(e)}`);
       }
     },

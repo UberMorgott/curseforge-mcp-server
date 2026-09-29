@@ -1,0 +1,45 @@
+{
+ "id": 1437738,
+ "title": "Nick Name Changer",
+ "summary": "A Hytale server plugin that lets players set custom nicknames displayed in chat, map, and above their heads.",
+ "game": "hytale",
+ "type": "Mods",
+ "urls": {
+  "curseforge": "https://www.curseforge.com/hytale/mods/nick-name-changer",
+  "project": "https://www.curseforge.com/hytale/mods/nick-name-changer"
+ },
+ "thumbnail": "https://media.forgecdn.net/avatars/thumbnails/1628/142/256/256/639044492674500897.png",
+ "created_at": "2026-01-20T09:34:08.763Z",
+ "downloads": {
+  "monthly": 0,
+  "total": 1735
+ },
+ "license": "",
+ "donate": "",
+ "categories": [
+  "Quality of Life",
+  "Utility"
+ ],
+ "members": [
+  {
+   "title": "Owner",
+   "username": "Morgott",
+   "id": 136845864
+  }
+ ],
+ "links": [],
+ "download": {
+  "id": 8954638,
+  "url": "https://www.curseforge.com/hytale/mods/nick-name-changer/files/8954638",
+  "display": "NickNameChanger v0.0.18",
+  "name": "NickNameChanger-0.0.18.jar",
+  "type": "release",
+  "version": "0.6",
+  "filesize": 417180,
+  "versions": [
+   "0.6"
+  ],
+  "downloads": 2,
+  "uploaded_at": "2026-09-23T11:41:54.53Z"
+ }
+}

@@ -1,0 +1,466 @@
+{
+ "data": [
+  {
+   "id": 8450535,
+   "text": "CrossbowSaveArrow 0.0.9 is out, with a fix for the hotbar jumping back to a loaded crossbow when scrolling. Installation has changed: put MixinTale-Bootstrap-3.0.0.jar in UserData/EarlyPlugins and CrossbowSaveArrow-0.0.9.jar in UserData/Mods, then enable the mod in the world's Mods tab under Global Mods. Remove the old CrossbowSaveArrow JAR from earlyplugins; Hyxin is no longer needed by this mod, but keep it if another mod requires it. My earlier replies about installing CrossbowSaveArrow in earlyplugins apply to 0.0.8 only. The description now has the full installation and upgrade steps.",
+   "body": "CrossbowSaveArrow 0.0.9 is out, with a fix for the hotbar jumping back to a loaded crossbow when scrolling. Installation has changed: put MixinTale-Bootstrap-3.0.0.jar in UserData/EarlyPlugins and CrossbowSaveArrow-0.0.9.jar in UserData/Mods, then enable the mod in the world's Mods tab under Global Mods. Remove the old CrossbowSaveArrow JAR from earlyplugins; Hyxin is no longer needed by this mod, but keep it if another mod requires it. My earlier replies about installing CrossbowSaveArrow in earlyplugins apply to 0.0.8 only. The description now has the full installation and upgrade steps.",
+   "renderedHtml": "CrossbowSaveArrow 0.0.9 is out, with a fix for the hotbar jumping back to a loaded crossbow when scrolling. Installation has changed: put MixinTale-Bootstrap-3.0.0.jar in UserData/EarlyPlugins and CrossbowSaveArrow-0.0.9.jar in UserData/Mods, then enable the mod in the world's Mods tab under Global Mods. Remove the old CrossbowSaveArrow JAR from earlyplugins; Hyxin is no longer needed by this mod, but keep it if another mod requires it. My earlier replies about installing CrossbowSaveArrow in earlyplugins apply to 0.0.8 only. The description now has the full installation and upgrade steps.",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user_7onp0c5v0pzp9m6j",
+    "id": 136845864,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "Morgott",
+    "userTierInfo": {
+     "tierLevel": 0,
+     "downloadsThreshold": 0
+    },
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1790151824010,
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7714392,
+   "text": "Not working still.",
+   "body": "<p>Not working still.</p>",
+   "renderedHtml": "<p>Not working still.</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user1",
+    "id": 9000001,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User1",
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1770849703377,
+   "replies": [
+    {
+     "id": 7720818,
+     "text": "In reply to User1: Which folder are you putting the mod in?",
+     "body": "<p>In reply to User1:  Which folder are you putting the mod in?</p><p>&nbsp;</p>",
+     "renderedHtml": "<p>In reply to User1:  Which folder are you putting the mod in?</p><p>&nbsp;</p>",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user_7onp0c5v0pzp9m6j",
+      "id": 136845864,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "Morgott",
+      "userTierInfo": {
+       "tierLevel": 0,
+       "downloadsThreshold": 0
+      },
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1771010296477,
+     "parentId": 7714392,
+     "replyCommentId": 7714392,
+     "replies": [
+      {
+       "id": 7728649,
+       "text": "In reply to Morgott:\r\n  I have Hyxin-0.0.11-all.jar in the UserDate/earlyplugins folder, and CrossbowSaveArrow-0.0.8.jar in Userdate/Saves/MyWorld/earlyplugins folder. \r\nIt might be a conflict caused by any of these mods I also have installed:\r\n\r\nMore Crossbow Tiers\r\nMore Arrows by Skovos\r\nSimple Enchantments [enchant that causes arrows to not be consumed]",
+       "body": "<p>In reply to <a class=\"reply-author\" href=\"https://legacy.curseforge.com/members/morgott\">Morgott</a>:</p>\n<p>&nbsp;I have Hyxin-0.0.11-all.jar in the UserDate/earlyplugins folder, and CrossbowSaveArrow-0.0.8.jar in Userdate/Saves/MyWorld/earlyplugins folder.&nbsp;<br />It might be a conflict caused by any of these mods I also have installed:<br /><br />More Crossbow Tiers<br />More Arrows by Skovos<br />Simple Enchantments [enchant that causes arrows to not be consumed]</p>",
+       "renderedHtml": "<p>In reply to <a href=\"https://legacy.curseforge.com/members/morgott\" rel=\"nofollow\">Morgott</a>:</p>\n<p>&nbsp;I have Hyxin-0.0.11-all.jar in the UserDate/earlyplugins folder, and CrossbowSaveArrow-0.0.8.jar in Userdate/Saves/MyWorld/earlyplugins folder.&nbsp;<br>It might be a conflict caused by any of these mods I also have installed:<br><br>More Crossbow Tiers<br>More Arrows by Skovos<br>Simple Enchantments [enchant that causes arrows to not be consumed]</p>",
+       "bodyType": 1,
+       "projectId": 1443010,
+       "author": {
+        "username": "user1",
+        "id": 9000001,
+        "twitchAvatarUrl": "https://example.invalid/avatar.png",
+        "displayName": "User1",
+        "isEarlyAccessAuthor": false
+       },
+       "datePosted": 1771195745133,
+       "parentId": 7720818,
+       "replyCommentId": 7720818,
+       "status": 1,
+       "isPinned": false
+      }
+     ],
+     "status": 1,
+     "isPinned": false
+    }
+   ],
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7694843,
+   "text": "v0.0.3 was broken by the Hytale update (2026.01.28). I've recompiled the mod against the latest game API — update coming shortly!",
+   "body": "<p>v0.0.3 was broken by the Hytale update (2026.01.28). I've recompiled the mod against the latest game API — update coming shortly!</p>",
+   "renderedHtml": "<p>v0.0.3 was broken by the Hytale update (2026.01.28). I've recompiled the mod against the latest game API — update coming shortly!</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user_7onp0c5v0pzp9m6j",
+    "id": 136845864,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "Morgott",
+    "userTierInfo": {
+     "tierLevel": 0,
+     "downloadsThreshold": 0
+    },
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1770406415610,
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7688042,
+   "text": "not working",
+   "body": "<p>not working</p>",
+   "renderedHtml": "<p>not working</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user2",
+    "id": 9000002,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User2",
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1770250610803,
+   "replies": [
+    {
+     "id": 7720819,
+     "text": "In reply to User2: Which folder are you putting the mod in?",
+     "body": "<p>In reply to User2: Which folder are you putting the mod in?</p>",
+     "renderedHtml": "<p>In reply to User2: Which folder are you putting the mod in?</p>",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user_7onp0c5v0pzp9m6j",
+      "id": 136845864,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "Morgott",
+      "userTierInfo": {
+       "tierLevel": 0,
+       "downloadsThreshold": 0
+      },
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1771010308717,
+     "parentId": 7688042,
+     "replyCommentId": 7688042,
+     "status": 1,
+     "isPinned": false
+    }
+   ],
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7684908,
+   "text": "doesn't appear to be working atm CrossbowSaveArrow-0.0.3.jar",
+   "body": "<p>doesn't appear to be working atm CrossbowSaveArrow-0.0.3.jar</p>",
+   "renderedHtml": "<p>doesn't appear to be working atm CrossbowSaveArrow-0.0.3.jar</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user3",
+    "id": 9000003,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User3",
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1770185719000,
+   "replies": [
+    {
+     "id": 7756227,
+     "text": "v0.0.3 was broken by the Hytale update. Please update to v0.0.8 — it's recompiled against the latest API.",
+     "body": "v0.0.3 was broken by the Hytale update. Please update to v0.0.8 — it's recompiled against the latest API.",
+     "renderedHtml": "v0.0.3 was broken by the Hytale update. Please update to v0.0.8 — it's recompiled against the latest API.",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user_7onp0c5v0pzp9m6j",
+      "id": 136845864,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "Morgott",
+      "userTierInfo": {
+       "tierLevel": 0,
+       "downloadsThreshold": 0
+      },
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1771785549663,
+     "parentId": 7684908,
+     "replyCommentId": 7684908,
+     "status": 1,
+     "isPinned": false
+    }
+   ],
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7680787,
+   "text": "Doesn't seem to work for version 2026.01.28-87D03BE09",
+   "body": "<p>Doesn't seem to work for version 2026.01.28-87D03BE09</p>",
+   "renderedHtml": "<p>Doesn't seem to work for version 2026.01.28-87D03BE09</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user4",
+    "id": 9000004,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User4",
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1770099425510,
+   "replies": [
+    {
+     "id": 7756228,
+     "text": "This was fixed in v0.0.8. Please update the mod!",
+     "body": "This was fixed in v0.0.8. Please update the mod!",
+     "renderedHtml": "This was fixed in v0.0.8. Please update the mod!",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user_7onp0c5v0pzp9m6j",
+      "id": 136845864,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "Morgott",
+      "userTierInfo": {
+       "tierLevel": 0,
+       "downloadsThreshold": 0
+      },
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1771785549883,
+     "parentId": 7680787,
+     "replyCommentId": 7680787,
+     "status": 1,
+     "isPinned": false
+    }
+   ],
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7667621,
+   "text": "Quote from User5:\r\nHaving a strange issue where using the scroll wheel to either scroll away from the crossbow, or quickly scroll over the crossbow, causes the selected item to return to the crossbow. I then either wrestle with the scrollwheel to change items, or manually press a number key to select one.\r\n\r\nThanks for the observation! I’m aware of this issue—it stems from the vanilla server-client interaction mechanics. I’m currently working on a fix for it. Appreciate your patience!",
+   "body": "<blockquote><div class=\"quote-source\">Quote from User5:</div><div class=\"quote-content\"><p>Having a strange issue where using the scroll wheel to either scroll away from the crossbow, or quickly scroll over the crossbow, causes the selected item to return to the crossbow. I then either wrestle with the scrollwheel to change items, or manually press a number key to select one.</p></div></blockquote><p>Thanks for the observation! I’m aware of this issue—it stems from the vanilla server-client interaction mechanics. I’m currently working on a fix for it. Appreciate your patience!</p>",
+   "renderedHtml": "<blockquote><div class=\"quote-source\">Quote from User5:</div><div class=\"quote-content\"><p>Having a strange issue where using the scroll wheel to either scroll away from the crossbow, or quickly scroll over the crossbow, causes the selected item to return to the crossbow. I then either wrestle with the scrollwheel to change items, or manually press a number key to select one.</p></div></blockquote><p>Thanks for the observation! I’m aware of this issue—it stems from the vanilla server-client interaction mechanics. I’m currently working on a fix for it. Appreciate your patience!</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user_7onp0c5v0pzp9m6j",
+    "id": 136845864,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "Morgott",
+    "userTierInfo": {
+     "tierLevel": 0,
+     "downloadsThreshold": 0
+    },
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1769857657950,
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7667614,
+   "text": "Quote from User6:\r\nFinally! Now we just need someone to do the same thing with weapon energy lol.\r\n \r\nEdit: I think I spoke too soon, this mod doesn't work for me :(. Don't have any mods that alter crossbows, so not sure why it doesn't work.\r\n\r\nHey! Thanks for the feedback! I actually made a mod for saving energy too, one of the first ones, and you'll see it in the list of my mods :)\r\n \r\nAs for the mod not working, double-check that you've installed it correctly, because it's not like regular mods. Take a look at the \"installation\" section in the mod description. That should help!",
+   "body": "<blockquote><div class=\"quote-source\">Quote from User6:</div><div class=\"quote-content\"><p>Finally! Now we just need someone to do the same thing with weapon energy lol.</p><p>&nbsp;</p><p>Edit: I think I spoke too soon, this mod doesn't work for me :(. Don't have any mods that alter crossbows, so not sure why it doesn't work.</p></div></blockquote><p>Hey! Thanks for the feedback! I actually made a mod for saving energy too, one of the first ones, and you'll see it in the list of my mods :)</p><p>&nbsp;</p><p>As for the mod not working, double-check that you've installed it correctly, because it's not like regular mods. Take a look at the \"installation\" section in the mod description. That should help!</p>",
+   "renderedHtml": "<blockquote><div class=\"quote-source\">Quote from User6:</div><div class=\"quote-content\"><p>Finally! Now we just need someone to do the same thing with weapon energy lol.</p><p>&nbsp;</p><p>Edit: I think I spoke too soon, this mod doesn't work for me :(. Don't have any mods that alter crossbows, so not sure why it doesn't work.</p></div></blockquote><p>Hey! Thanks for the feedback! I actually made a mod for saving energy too, one of the first ones, and you'll see it in the list of my mods :)</p><p>&nbsp;</p><p>As for the mod not working, double-check that you've installed it correctly, because it's not like regular mods. Take a look at the \"installation\" section in the mod description. That should help!</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user_7onp0c5v0pzp9m6j",
+    "id": 136845864,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "Morgott",
+    "userTierInfo": {
+     "tierLevel": 0,
+     "downloadsThreshold": 0
+    },
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1769857570557,
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7665865,
+   "text": "Having a strange issue where using the scroll wheel to either scroll away from the crossbow, or quickly scroll over the crossbow, causes the selected item to return to the crossbow. I then either wrestle with the scrollwheel to change items, or manually press a number key to select one.",
+   "body": "<p>Having a strange issue where using the scroll wheel to either scroll away from the crossbow, or quickly scroll over the crossbow, causes the selected item to return to the crossbow. I then either wrestle with the scrollwheel to change items, or manually press a number key to select one.</p>",
+   "renderedHtml": "<p>Having a strange issue where using the scroll wheel to either scroll away from the crossbow, or quickly scroll over the crossbow, causes the selected item to return to the crossbow. I then either wrestle with the scrollwheel to change items, or manually press a number key to select one.</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user5",
+    "id": 9000005,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User5",
+    "isEarlyAccessAuthor": false
+   },
+   "editedBy": {
+    "username": "user5",
+    "id": 9000005,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User5",
+    "isEarlyAccessAuthor": false
+   },
+   "dateEdited": 1769816960447,
+   "datePosted": 1769816960460,
+   "replies": [
+    {
+     "id": 8450533,
+     "text": "I was wrong about this being a vanilla bug — the hotbar snap-back and jumping ammo counter were caused by the mod. Fixed in 0.0.9 by changing how the crossbow switches away, without adding a delay. Thanks for reporting it, User5; installation has changed to MixinTale, so please follow the updated description when upgrading.",
+     "body": "I was wrong about this being a vanilla bug — the hotbar snap-back and jumping ammo counter were caused by the mod. Fixed in 0.0.9 by changing how the crossbow switches away, without adding a delay. Thanks for reporting it, User5; installation has changed to MixinTale, so please follow the updated description when upgrading.",
+     "renderedHtml": "I was wrong about this being a vanilla bug — the hotbar snap-back and jumping ammo counter were caused by the mod. Fixed in 0.0.9 by changing how the crossbow switches away, without adding a delay. Thanks for reporting it, User5; installation has changed to MixinTale, so please follow the updated description when upgrading.",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user_7onp0c5v0pzp9m6j",
+      "id": 136845864,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "Morgott",
+      "userTierInfo": {
+       "tierLevel": 0,
+       "downloadsThreshold": 0
+      },
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1790151823313,
+     "parentId": 7665865,
+     "replyCommentId": 7665865,
+     "status": 1,
+     "isPinned": false
+    },
+    {
+     "id": 7756229,
+     "text": "Thanks for the report! I've investigated this — the mod doesn't change the selected hotbar slot at all, it only saves/restores arrow count. This is likely a vanilla Hytale bug or a conflict with another mod. Could you check if it happens without CrossbowSaveArrow installed?",
+     "body": "Thanks for the report! I've investigated this — the mod doesn't change the selected hotbar slot at all, it only saves/restores arrow count. This is likely a vanilla Hytale bug or a conflict with another mod. Could you check if it happens without CrossbowSaveArrow installed?",
+     "renderedHtml": "Thanks for the report! I've investigated this — the mod doesn't change the selected hotbar slot at all, it only saves/restores arrow count. This is likely a vanilla Hytale bug or a conflict with another mod. Could you check if it happens without CrossbowSaveArrow installed?",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user_7onp0c5v0pzp9m6j",
+      "id": 136845864,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "Morgott",
+      "userTierInfo": {
+       "tierLevel": 0,
+       "downloadsThreshold": 0
+      },
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1771785550370,
+     "parentId": 7665865,
+     "replyCommentId": 7665865,
+     "status": 1,
+     "isPinned": false
+    }
+   ],
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7664420,
+   "text": "Finally! Now we just need someone to do the same thing with weapon energy lol.\r\n \r\nEdit: I think I spoke too soon, this mod doesn't work for me :(. Don't have any mods that alter crossbows, so not sure why it doesn't work.",
+   "body": "<p>Finally! Now we just need someone to do the same thing with weapon energy lol.</p><p>&nbsp;</p><p>Edit: I think I spoke too soon, this mod doesn't work for me :(. Don't have any mods that alter crossbows, so not sure why it doesn't work.</p>",
+   "renderedHtml": "<p>Finally! Now we just need someone to do the same thing with weapon energy lol.</p><p>&nbsp;</p><p>Edit: I think I spoke too soon, this mod doesn't work for me :(. Don't have any mods that alter crossbows, so not sure why it doesn't work.</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user6",
+    "id": 9000006,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User6",
+    "isEarlyAccessAuthor": false
+   },
+   "editedBy": {
+    "username": "user6",
+    "id": 9000006,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "User6",
+    "isEarlyAccessAuthor": false
+   },
+   "dateEdited": 1769826690537,
+   "datePosted": 1769826690543,
+   "replies": [
+    {
+     "id": 7756230,
+     "text": "Make sure you're using the latest version (v0.0.8). Older versions were broken by the Hytale update.",
+     "body": "Make sure you're using the latest version (v0.0.8). Older versions were broken by the Hytale update.",
+     "renderedHtml": "Make sure you're using the latest version (v0.0.8). Older versions were broken by the Hytale update.",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user_7onp0c5v0pzp9m6j",
+      "id": 136845864,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "Morgott",
+      "userTierInfo": {
+       "tierLevel": 0,
+       "downloadsThreshold": 0
+      },
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1771785550600,
+     "parentId": 7664420,
+     "replyCommentId": 7664420,
+     "status": 1,
+     "isPinned": false
+    }
+   ],
+   "status": 1,
+   "isPinned": false
+  },
+  {
+   "id": 7664068,
+   "text": "Quote from User7:\r\nim having a problem similar to Leotec26, i use the RPG leveling as well but also More & Better Crossbows - would it be possible to add compatibility? would be really neat to see more mods that compliment eachother Thanks for the feedback. Which version are you using? In older versions this issue could happen.\r\nI tested the latest version (0.0.2), added +1 arrow, and everything works correctly — the arrows don’t disappear.",
+   "body": "<blockquote><div class=\"quote-source\">Quote from User7:</div><div class=\"quote-content\"><p>im having a problem similar to Leotec26, i use the RPG leveling as well but also More &amp; Better Crossbows - would it be possible to add compatibility? would be really neat to see more mods that compliment eachother &lt;3</p></div></blockquote><p>Thanks for the feedback. Which version are you using? In older versions this issue could happen.</p><p>I tested the latest version (0.0.2), added +1 arrow, and everything works correctly — the arrows don’t disappear.</p>",
+   "renderedHtml": "<blockquote><div class=\"quote-source\">Quote from User7:</div><div class=\"quote-content\"><p>im having a problem similar to Leotec26, i use the RPG leveling as well but also More &amp; Better Crossbows - would it be possible to add compatibility? would be really neat to see more mods that compliment eachother &lt;3</p></div></blockquote><p>Thanks for the feedback. Which version are you using? In older versions this issue could happen.</p><p>I tested the latest version (0.0.2), added +1 arrow, and everything works correctly — the arrows don’t disappear.</p>",
+   "bodyType": 1,
+   "projectId": 1443010,
+   "author": {
+    "username": "user_7onp0c5v0pzp9m6j",
+    "id": 136845864,
+    "twitchAvatarUrl": "https://example.invalid/avatar.png",
+    "displayName": "Morgott",
+    "userTierInfo": {
+     "tierLevel": 0,
+     "downloadsThreshold": 0
+    },
+    "isEarlyAccessAuthor": false
+   },
+   "datePosted": 1769789339697,
+   "replies": [
+    {
+     "id": 7668196,
+     "text": "In reply to Morgott: i think it has more to do with the More & Better Crossbows mod, i update all my mods before i run my game every day so that shouldnt be an issue",
+     "body": "<p>In reply to Morgott: i think it has more to do with the More & Better Crossbows mod, i update all my mods before i run my game every day so that shouldnt be an issue</p>",
+     "renderedHtml": "<p>In reply to Morgott: i think it has more to do with the More & Better Crossbows mod, i update all my mods before i run my game every day so that shouldnt be an issue</p>",
+     "bodyType": 1,
+     "projectId": 1443010,
+     "author": {
+      "username": "user7",
+      "id": 9000007,
+      "twitchAvatarUrl": "https://example.invalid/avatar.png",
+      "displayName": "User7",
+      "isEarlyAccessAuthor": false
+     },
+     "datePosted": 1769869695290,
+     "parentId": 7664068,
+     "status": 1,
+     "isPinned": false
+    }
+   ],
+   "status": 1,
+   "isPinned": false
+  }
+ ],
+ "pagination": {
+  "index": 0,
+  "totalCount": 28,
+  "pageSize": 20
+ }
+}

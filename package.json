@@ -15,6 +15,7 @@
     "build": "tsc",
     "start": "node build/index.js",
     "dev": "tsx watch src/index.ts",
+    "test": "tsx --test test/*.test.ts",
     "setup": "tsx src/setup.ts",
     "prepare": "tsc",
     "prepublishOnly": "npm run build"

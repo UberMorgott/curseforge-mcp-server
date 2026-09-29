@@ -71,6 +71,13 @@ export class BrowserClient {
       result = await this.evaluateWithTimeout(page, url, fetchOpts);
     }
 
+    // Rate limited: reads back off once (3 s); writes are never retried.
+    if (result.status === 429 && method === "GET") {
+      console.error("[browser-client] Got 429, retrying once in 3 s");
+      await new Promise((r) => setTimeout(r, 3000));
+      result = await this.evaluateWithTimeout(page, url, fetchOpts);
+    }
+
     if (result.status < 200 || result.status >= 300) {
       throw new Error(`HTTP ${result.status}: ${url}${result.body ? `\n${result.body.slice(0, 500)}` : ""}`);
     }

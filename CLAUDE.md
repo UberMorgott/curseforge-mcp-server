@@ -2,7 +2,7 @@
 
 ## Overview
 Universal MCP server, full CurseForge platform management — any game (Minecraft, Hytale, WoW, etc.).
-26 tools: search mods, download/upload files, manage comments, project settings.
+27 tools: search mods, download/upload files, manage comments, project settings.
 Zero-config: auto-extracts browser cookies; CFWidget tools work without API key.
 
 ## Build & Run
@@ -44,7 +44,7 @@ All credentials optional, stored in `.env`:
 - `CURSEFORGE_BROWSER_VISIBLE` — debug only; `1` shows the Web API browser window (default headless)
 - `.auth/cookies.json` — Web API session cookies (auto-extracted from browser on startup)
 
-## Tools (26 total)
+## Tools (27 total)
 
 **Core API (12)** — needs API key:
 `search_mods`, `get_mod`, `get_mod_files`, `get_mod_file`, `get_mod_description`, `get_mod_changelog`, `get_download_url`, `download_mod`, `get_featured_mods`, `get_mods_batch`, `get_categories`, `get_game_versions`
@@ -55,15 +55,15 @@ All credentials optional, stored in `.env`:
 **Upload API (3)** — needs author token:
 `upload_file`, `get_upload_game_versions`, `get_upload_game_version_types`
 
-**Web API (9)** — unofficial browser workaround; needs session cookies (auto-extracted) + browser:
-`cf_set_cookies`, `cf_auto_extract_cookies`, `get_comments`, `post_comment`, `delete_comment`, `get_project_settings`, `update_project_description`, `update_project_links`, `cf_fetch_page`
+**Web API (10)** — unofficial browser workaround; needs session cookies (auto-extracted) + browser:
+`cf_set_cookies`, `cf_auto_extract_cookies`, `cf_session_status`, `get_comments`, `post_comment`, `delete_comment`, `get_project_settings`, `update_project_description`, `update_project_links`, `cf_fetch_page`
 
 ## Key Conventions
 
 - **NEVER** write to stdout (console.log). Log via console.error only.
   Stdout = MCP JSON-RPC transport channel.
 - All tool handlers use `success()` / `error()` helpers from `src/utils/types.ts`.
-- Responses token-efficient: compact text summaries, not verbose JSON.
+- Responses token-efficient: compact text summaries, not verbose JSON. Machine output = opt-in `format: "json"` (`src/utils/structured.ts`, shapes + zod in `src/tools/json-shapes.ts`, README → Structured output); text stays default and unchanged.
 - Session cookies auto-extracted from browser via `@rookie-rs/api` (12+ browsers).
 - `@rookie-rs/api` loaded via dynamic `import()` — server no crash if native module unavailable.
 - `curseforge-api` library handles Core API requests. Don't reimplement.
@@ -91,5 +91,6 @@ All credentials optional, stored in `.env`:
 ## Testing
 
 ```bash
+npm test   # fixture tests (test/fixtures = saved API responses, anonymized), no network
 npx @modelcontextprotocol/inspector node build/index.js
 ```

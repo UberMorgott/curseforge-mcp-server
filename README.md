@@ -122,7 +122,7 @@ All credentials are optional. The server works in three tiers:
 - **Author Token**: Get from [curseforge.com/account/api-tokens](https://www.curseforge.com/account/api-tokens)
 - **Session cookies**: Auto-extracted from your browser, or set manually via the `cf_set_cookies` tool
 
-## Tools (26)
+## Tools (27)
 
 ### Core API (12) — requires API key
 
@@ -156,7 +156,7 @@ All credentials are optional. The server works in three tiers:
 | `get_upload_game_versions` | Get version IDs for upload form (`game_slug`, e.g. `hytale`; defaults to `CURSEFORGE_GAME_SLUG`) |
 | `get_upload_game_version_types` | Get version type categories for a game (`game_slug`; needs `CURSEFORGE_API_KEY`) |
 
-### Web API (9) — requires a browser + session cookies (unofficial workaround)
+### Web API (10) — requires a browser + session cookies (unofficial workaround)
 
 These tools have no official CurseForge API. They use a real browser (patchright's bundled Chromium, or your system Chrome as fallback) to bypass Cloudflare protection on curseforge.com. The browser launches automatically on first use (minimized window) and stays running for the session. This is an unofficial workaround and may break if CurseForge changes their site.
 
@@ -164,6 +164,7 @@ These tools have no official CurseForge API. They use a real browser (patchright
 |------|-------------|
 | `cf_set_cookies` | Set session cookies manually |
 | `cf_auto_extract_cookies` | Auto-extract cookies from browser |
+| `cf_session_status` | Is the stored session signed in (never opens a login window) |
 | `get_comments` | Read threaded comments on a project |
 | `post_comment` | Post a comment or reply |
 | `delete_comment` | Delete a comment |
@@ -171,6 +172,34 @@ These tools have no official CurseForge API. They use a real browser (patchright
 | `update_project_description` | Update project description (HTML) |
 | `update_project_links` | Update project Source link (GitHub/Bitbucket/other URL) |
 | `cf_fetch_page` | Raw request to any CurseForge API endpoint |
+
+## Structured output (`format: "json"`)
+
+For programs (e.g. IssueWatcher) these tools take `format: "json"` (default `"text"`,
+unchanged): `search_author`, `get_project`, `get_comments`, `post_comment`,
+`cf_session_status`, `cf_auto_extract_cookies`. The result is the full, untruncated object
+as MCP `structuredContent`, and the same JSON in the text block. No `outputSchema` is
+declared (the SDK would then demand structuredContent in text mode too); the zod schemas
+live in `src/tools/json-shapes.ts` and are checked by `npm test` against saved API
+responses in `test/fixtures/`. JSON-mode web calls never open the login window on 401
+(they return `not_logged_in`).
+
+Conventions: comment ids are strings; mod / user ids and counts are numbers; `*At` =
+ISO-8601 UTC or `null`.
+
+| Tool | Result |
+|---|---|
+| `search_author` | `{author:{id, username}, projects:[{id, name}]}` (CFWidget, keyless; unknown user → `not_found`) |
+| `get_project` | `{id, title, summary, game, type, url, createdAt, downloads, members:[{id, username, title}]}` |
+| `get_comments` | `{modId, page, pages, pageSize:20, total, comments:[{id, parentId:null, author, authorId, authorUsername, createdAt, updatedAt, body, bodyHtml, pinned, replies:[{id, parentId, depth, author, authorId, authorUsername, createdAt, updatedAt, body, bodyHtml}]}]}` — root threads newest first; every nested reply flattened depth-first with its `parentId` (`depth` 1 = reply to the root); 20 entries per page **counting replies**, `total` = entries; a new reply on an old thread stays on that thread's page, so a sync must walk all `pages`. `body` = site plain text, `bodyHtml` = rendered HTML; `updatedAt` = `dateEdited` |
+| `post_comment` | `{posted:true, id, parentId, verified}` — `id` from the response if it has one, else read back (first 3 pages, same text + same parent, newest); `verified:false, id:null` if not found |
+| `cf_session_status` | `{loggedIn, cookiesStored, user:{id, displayName, username} \| null, detail}` — the site's own `GET /api/v1/users/profile`; never opens a login window |
+| `cf_auto_extract_cookies` | `{result, cookiesStored, loginWindowOpened}` |
+
+Errors (`isError: true`): `structuredContent = {error:{code, message}}`, `code` ∈
+`not_logged_in` (no cookies / HTTP 401), `cloudflare` (HTTP 403 after the challenge retry),
+`not_found`, `disabled`, `rate_limited`, `invalid`, `error`. Writes are never retried;
+browser GETs back off once on HTTP 429 (3 s).
 
 ## Environment Variables
 

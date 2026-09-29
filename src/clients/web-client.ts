@@ -228,6 +228,7 @@ export class WebClient {
     method: string,
     body?: unknown,
     extraHeaders?: Record<string, string>,
+    interactive = true,
   ): Promise<any> {
     const xsrf = this.getXsrfToken();
     const headers: Record<string, string> = {
@@ -241,7 +242,8 @@ export class WebClient {
       // On 401, open the login window (non-blocking) and surface a clear message.
       // We can't wait for an interactive login within a single request, so the
       // caller should retry after logging in (or use cf_set_cookies).
-      if (err?.message?.includes("HTTP 401") && !this.loginAttempted) {
+      // `interactive: false` (format "json" callers, unattended) never opens a window.
+      if (interactive && err?.message?.includes("HTTP 401") && !this.loginAttempted) {
         this.loginAttempted = true;
         const msg = await this.browserLogin();
         throw new Error(`Authentication required. ${msg}`);
@@ -252,6 +254,32 @@ export class WebClient {
 
   async get(url: string, extraHeaders?: Record<string, string>): Promise<any> {
     return this.request(url, "GET", undefined, extraHeaders);
+  }
+
+  /** GET/POST that never opens the login window on 401 (it just throws "HTTP 401"). */
+  async getQuiet(url: string): Promise<any> {
+    return this.request(url, "GET", undefined, undefined, false);
+  }
+
+  async postQuiet(url: string, body?: unknown): Promise<any> {
+    return this.request(url, "POST", body, undefined, false);
+  }
+
+  /** Session check as the site does it on every page: GET /api/v1/users/profile
+   *  (200 + userId when signed in). Never opens a login window. */
+  async sessionStatus(): Promise<{ loggedIn: boolean; user: { id: number | null; displayName: string | null; username: string | null } | null; detail: string }> {
+    if (!this.hasCookies()) return { loggedIn: false, user: null, detail: "no session cookies" };
+    try {
+      const p = await this.getQuiet("https://www.curseforge.com/api/v1/users/profile");
+      if (p && typeof p === "object" && p.userId) {
+        return { loggedIn: true, user: { id: Number(p.userId), displayName: p.displayName ?? null, username: p.userName ?? null }, detail: "session valid" };
+      }
+      return { loggedIn: false, user: null, detail: "profile has no user (signed out)" };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("HTTP 401")) return { loggedIn: false, user: null, detail: "HTTP 401 (session expired)" };
+      throw e;
+    }
   }
 
   async post(
