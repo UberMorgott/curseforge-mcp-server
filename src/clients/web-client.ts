@@ -75,6 +75,9 @@ export class WebClient {
   /** Bumped by logout so a running login poll stops without saving. */
   private loginGeneration = 0;
   private loginTask: Promise<void> | null = null;
+  /** Bumped on every session change (save or logout) so a stale background
+   *  extraction cannot overwrite a newer session or undo a logout. */
+  private sessionGeneration = 0;
   private meta: SessionMeta = { source: null, browser: null, signedOut: false };
 
   constructor(config: Config, deps: WebClientDeps = {}) {
@@ -148,6 +151,7 @@ export class WebClient {
 
   /** Persist cookies together with where they came from (clears the signed-out marker). */
   private saveSession(source: Exclude<SessionSource, null>, browser: string | null = null): void {
+    this.sessionGeneration++;
     this.saveCookies();
     this.saveMeta({ source, browser: source === "browser" ? browser : null, signedOut: false });
   }
@@ -167,8 +171,14 @@ export class WebClient {
 
   /** Silent @rookie-rs extraction for startup; no login window, no throw. */
   private async backgroundExtract(): Promise<void> {
+    const gen = this.sessionGeneration;
     try {
       const result = (await this.extractAll()).find((r) => r.cookies.length > 0);
+      // A logout or a newer session during extraction wins; drop the stale result.
+      if (gen !== this.sessionGeneration || this.meta.signedOut || this.hasCookies()) {
+        if (result) log("startup extract: discarded (session changed during extraction)");
+        return;
+      }
       if (result) {
         this.cookies = result.cookies;
         this.browser.setCookies(result.cookies);
@@ -479,6 +489,7 @@ export class WebClient {
     this.loginAttempted = false;
     this.via = null;
     this.viaBrowser = null;
+    this.sessionGeneration++;
     this.cookies = [];
     rmSync(this.config.cookiesPath, { force: true });
     this.saveMeta({ source: null, browser: null, signedOut: true });

@@ -191,6 +191,30 @@ test("logout: stops login polling, clears cookies everywhere, no silent re-extra
   assert.deepEqual(metaOf(cfg), { source: "browser", browser: "chrome", signedOut: false });
 });
 
+test("logout during startup background extract: stale result dropped, stays signed out", async () => {
+  const cfg = config();
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  let started = false;
+  const client = new WebClient(cfg, { ...noDefault,
+    browser: fakeBrowser([]).b,
+    extractAll: async () => {
+      started = true;
+      await gate;
+      return [{ cookies: [ck("SignedIn")], browser: "chrome" }];
+    },
+  });
+  client.init();
+  await waitFor(() => started);
+  await client.logout();
+  release();
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(client.hasCookies(), false, "extraction must not re-attach the session");
+  assert.equal(client.signedOut, true);
+  assert.equal(existsSync(cfg.cookiesPath), false);
+  assert.deepEqual(metaOf(cfg), { source: null, browser: null, signedOut: true });
+});
+
 test("logout then cf_set_cookies clears the signed-out marker", async () => {
   const cfg = config();
   const client = new WebClient(cfg, { ...noDefault, browser: fakeBrowser([]).b });
