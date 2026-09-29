@@ -9,6 +9,7 @@ import path from "node:path";
 import { WebClient, type WebBrowser } from "../src/clients/web-client.js";
 import type { Config } from "../src/config.js";
 import { browserFromProgId } from "../src/clients/default-browser.js";
+import { extractionResult } from "../src/clients/cookie-extractor.js";
 import type { CookieEntry } from "../src/utils/types.js";
 
 const ck = (name: string, value = "v"): CookieEntry => ({ name, value, domain: ".curseforge.com", path: "/" });
@@ -241,6 +242,7 @@ test("path 2: readable default browser gets the login page and is polled until s
     detectDefaultBrowser: async () => ({ progId: "MSEdgeHTM", browser: "edge" }),
     extractFrom: async (browser) => ({ browser, cookies: polls++ < 3 ? [ck("Anon")] : [ck("Anon"), ck("SignedIn")] }),
     openUrl: async (url) => { opened.push(url); },
+    storeSignature: async () => String(Math.random()), // DB changes every tick
     loginPollMs: 1,
     loginMaxWaitMs: 5_000,
   });
@@ -289,6 +291,8 @@ test("cf_login_cancel: stops default-browser polling and closes the sign-in wind
     detectDefaultBrowser: async () => ({ progId: "FirefoxURL-308046B0AF4A39CB", browser: "firefox" }),
     extractFrom: async (browser) => ({ browser, cookies: [ck("Anon")] }),
     openUrl: async () => {},
+    storeSignature: async () => null,
+    forcedReadMs: 1,
     loginPollMs: 1,
     loginMaxWaitMs: 60_000,
   });
@@ -315,4 +319,52 @@ test("default browser ProgId mapping (incl. Cent Browser)", () => {
     ["CentHTM.PVOYJF5YAEQRUHCVWLHIFLU56M", "centbrowser"], ["SomethingElse", null], [null, null],
   ];
   for (const [progId, want] of cases) assert.equal(browserFromProgId(progId), want, String(progId));
+});
+test("all-empty cookie values count as an unreadable store", () => {
+  const empty = extractionResult("centbrowser", [ck("SiteUserToken", ""), ck("User", "")]);
+  assert.equal(empty.cookies.length, 0);
+  assert.match(empty.error ?? "", /could not be decrypted \(all empty\): 2 cookies/);
+  assert.deepEqual(extractionResult("edge", [ck("A", ""), ck("B", "x")]), { browser: "edge", cookies: [ck("A", ""), ck("B", "x")] });
+  assert.deepEqual(extractionResult("edge", []), { browser: "edge", cookies: [] });
+});
+
+test("default-browser polling reads the store only when its DB changed, else once per forced interval", async () => {
+  let sig = "same";
+  let reads = 0;
+  const client = new WebClient(config(), {
+    browser: fakeBrowser([]).b,
+    extractAll: async () => [],
+    detectDefaultBrowser: async () => ({ progId: "CentHTM.X", browser: "centbrowser" }),
+    extractFrom: async (browser) => (reads++, { browser, cookies: sig === "same" ? [ck("Anon")] : [ck("Anon"), ck("SignedIn")] }),
+    openUrl: async () => {},
+    storeSignature: async () => sig,
+    forcedReadMs: 60_000,
+    loginPollMs: 1,
+    loginMaxWaitMs: 5_000,
+  });
+  await client.autoExtractCookies();
+  assert.equal(reads, 1, "readable probe only");
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(reads, 1, "unchanged DB: no reads before the forced interval");
+  sig = "changed";
+  await waitFor(() => !client.loginInProgress);
+  assert.equal(reads, 2, "one read after the change");
+  assert.equal(client.sessionBrowser, "centbrowser");
+
+  let forced = 0;
+  const unknown = new WebClient(config(), {
+    browser: fakeBrowser([]).b,
+    extractAll: async () => [],
+    detectDefaultBrowser: async () => ({ progId: "CentHTM.X", browser: "centbrowser" }),
+    extractFrom: async (browser) => (forced++, { browser, cookies: [ck("Anon")] }),
+    openUrl: async () => {},
+    storeSignature: async () => null, // unknown store: forced reads only
+    forcedReadMs: 25,
+    loginPollMs: 1,
+    loginMaxWaitMs: 60_000,
+  });
+  await unknown.autoExtractCookies();
+  await new Promise((r) => setTimeout(r, 120));
+  await unknown.cancelLogin();
+  assert.ok(forced >= 2 && forced <= 7, `forced reads throttled (got ${forced - 1} after the probe)`);
 });

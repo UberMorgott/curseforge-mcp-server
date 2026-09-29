@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { CookieEntry } from "../utils/types.js";
-import { CookieExtractor, type ExtractionResult } from "./cookie-extractor.js";
+import { CookieExtractor, cookieStoreSignature, type ExtractionResult } from "./cookie-extractor.js";
 import { BrowserClient } from "./browser-client.js";
 import { detectDefaultBrowser, openInDefaultBrowser, type DefaultBrowser } from "./default-browser.js";
 
@@ -30,6 +30,10 @@ export interface WebClientDeps {
   extractFrom?: (browser: string) => Promise<ExtractionResult>;
   detectDefaultBrowser?: () => Promise<DefaultBrowser>;
   openUrl?: (url: string) => Promise<void>;
+  /** Cookie DB change signature (mtime/size); null = unknown store. */
+  storeSignature?: (browser: string) => Promise<string | null>;
+  /** Default-browser polling: max interval between reads when the DB looks unchanged. */
+  forcedReadMs?: number;
   loginPollMs?: number;
   loginMaxWaitMs?: number;
 }
@@ -60,6 +64,8 @@ export class WebClient {
   private extractFrom: (browser: string) => Promise<ExtractionResult>;
   private detectDefault: () => Promise<DefaultBrowser>;
   private openUrl: (url: string) => Promise<void>;
+  private storeSignature: (browser: string) => Promise<string | null>;
+  private forcedReadMs: number;
   private via: LoginVia = null;
   private viaBrowser: string | null = null;
   private loginPollMs: number;
@@ -79,6 +85,8 @@ export class WebClient {
     this.extractFrom = deps.extractFrom ?? ((b) => extractor.extractFrom(b));
     this.detectDefault = deps.detectDefaultBrowser ?? detectDefaultBrowser;
     this.openUrl = deps.openUrl ?? openInDefaultBrowser;
+    this.storeSignature = deps.storeSignature ?? cookieStoreSignature;
+    this.forcedReadMs = deps.forcedReadMs ?? 30_000;
     this.loginPollMs = deps.loginPollMs ?? 3_000;
     // Generous: users with 2FA / Google sign-in need several minutes.
     this.loginMaxWaitMs = deps.loginMaxWaitMs ?? 600_000;
@@ -355,9 +363,18 @@ export class WebClient {
   private async pollDefaultBrowser(gen: number, name: string, seen: string): Promise<void> {
     const start = Date.now();
     const cancelled = () => gen !== this.loginGeneration;
+    // Each extraction of a locked Chromium DB unlocks it via Restart Manager, so read only
+    // when the DB (or its -wal) changed on disk, plus at most one forced read per forcedReadMs.
+    let lastSig = await this.storeSignature(name).catch(() => null);
+    let lastRead = Date.now();
     while (Date.now() - start < this.loginMaxWaitMs) {
       await new Promise((r) => setTimeout(r, this.loginPollMs));
       if (cancelled()) return;
+      const sig = await this.storeSignature(name).catch(() => null);
+      const changed = sig !== null && sig !== lastSig;
+      if (!changed && Date.now() - lastRead < this.forcedReadMs) continue;
+      lastSig = sig;
+      lastRead = Date.now();
       const r = await this.extractFrom(name).catch((e): ExtractionResult => ({ browser: name, cookies: [], error: errMsg(e) }));
       if (cancelled()) return;
       if (r.error || r.cookies.length === 0) continue;

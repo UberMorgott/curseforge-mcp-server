@@ -1,6 +1,6 @@
 import os from "node:os";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import type { CookieObject } from "@rookie-rs/api";
 import type { CookieEntry } from "../utils/types.js";
@@ -28,25 +28,82 @@ function toCookieEntries(raw: CookieObject[]): CookieEntry[] {
 
 const localAppData = () => process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local");
 
-/** Chromium-based browser without a rookie shortcut: read `<userData>\<last used profile>\
- *  (Network\)Cookies` with the `Local State` key. First existing user-data dir wins. */
+const appData = () => process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+
+/** `<userData>\<last used profile>\(Network\)Cookies` + `Local State` of the first
+ *  user-data dir that exists, or null when none does. */
+function chromiumStore(dirs: string[]): { localState: string; db: string } | null {
+  const userData = dirs.find((d) => existsSync(path.join(d, "Local State")));
+  if (!userData) return null;
+  const localState = path.join(userData, "Local State");
+  let profile = "Default";
+  try {
+    profile = JSON.parse(readFileSync(localState, "utf-8"))?.profile?.last_used || "Default";
+  } catch {
+    // unreadable Local State: rookie reports the key error
+  }
+  const network = path.join(userData, profile, "Network", "Cookies");
+  return { localState, db: existsSync(network) ? network : path.join(userData, profile, "Cookies") };
+}
+
+/** Chromium-based browser without a rookie shortcut, read via chromiumBased(Local State, Cookies). */
 function chromiumUserData(r: Rookie, dirs: () => string[]): BrowserFn {
   return (domains) => {
-    const userData = dirs().find((d) => existsSync(path.join(d, "Local State")));
-    if (!userData) throw new Error("not installed (no User Data dir with Local State)");
-    const localState = path.join(userData, "Local State");
-    let profile = "Default";
-    try {
-      profile = JSON.parse(readFileSync(localState, "utf-8"))?.profile?.last_used || "Default";
-    } catch {
-      // unreadable Local State: rookie reports the key error below
-    }
-    const network = path.join(userData, profile, "Network", "Cookies");
-    const db = existsSync(network) ? network : path.join(userData, profile, "Cookies");
-    return r.chromiumBased(localState, db, domains);
+    const store = chromiumStore(dirs());
+    if (!store) throw new Error("not installed (no User Data dir with Local State)");
+    return r.chromiumBased(store.localState, store.db, domains);
   };
 }
 
+/** Cookie DB file of a browser (Windows layouts), for change detection only; null = unknown. */
+function storeDb(browser: string): string | null {
+  const chromium: Record<string, () => string[]> = {
+    chrome: () => [path.join(localAppData(), "Google", "Chrome", "User Data")],
+    edge: () => [path.join(localAppData(), "Microsoft", "Edge", "User Data")],
+    brave: () => [path.join(localAppData(), "BraveSoftware", "Brave-Browser", "User Data")],
+    chromium: () => [path.join(localAppData(), "Chromium", "User Data")],
+    vivaldi: () => [path.join(localAppData(), "Vivaldi", "User Data")],
+    yandex: () => [path.join(localAppData(), "Yandex", "YandexBrowser", "User Data")],
+    centbrowser: centBrowserDirs,
+  };
+  const key = browser.toLowerCase();
+  if (chromium[key]) return chromiumStore(chromium[key]())?.db ?? null;
+  if (key === "opera") {
+    const root = path.join(appData(), "Opera Software", "Opera Stable");
+    const network = path.join(root, "Network", "Cookies");
+    return existsSync(network) ? network : existsSync(path.join(root, "Cookies")) ? path.join(root, "Cookies") : null;
+  }
+  if (key === "firefox") {
+    const profiles = path.join(appData(), "Mozilla", "Firefox", "Profiles");
+    try {
+      const dbs = readdirSync(profiles)
+        .map((d) => path.join(profiles, d, "cookies.sqlite"))
+        .filter((f) => existsSync(f))
+        .sort((x, y) => statSync(y).mtimeMs - statSync(x).mtimeMs);
+      return dbs[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Change signature of a browser's cookie DB (+ -wal / -journal): mtime and size via
+ *  fs.stat, which works on a locked file and never triggers an unlock. null = unknown store. */
+export async function cookieStoreSignature(browser: string): Promise<string | null> {
+  const db = storeDb(browser);
+  if (!db || !existsSync(db)) return null;
+  return [db, `${db}-wal`, `${db}-journal`]
+    .map((f) => {
+      try {
+        const st = statSync(f);
+        return `${st.mtimeMs}:${st.size}`;
+      } catch {
+        return "-";
+      }
+    })
+    .join("|");
+}
 let centDirs: string[] | null = null;
 
 /** Cent Browser: the standard install dir, plus portable installs (User Data next to
@@ -107,9 +164,21 @@ async function loadRookie(): Promise<Rookie | null> {
   }
 }
 
+/** Cookies whose values all came back empty = the store's encryption was not decrypted
+ *  (e.g. a newer Chromium cookie format rookie does not handle): unreadable, not "no session". */
+export const UNDECRYPTED = "cookie values could not be decrypted (all empty)";
+
+/** Result for cookies read from one browser; an all-empty-values store counts as unreadable. */
+export function extractionResult(browser: string, cookies: CookieEntry[]): ExtractionResult {
+  if (cookies.length > 0 && cookies.every((c) => !c.value)) {
+    return { browser, cookies: [], error: `${UNDECRYPTED}: ${cookies.length} cookies` };
+  }
+  return { browser, cookies };
+}
+
 function readOne(name: string, fn: BrowserFn): ExtractionResult {
   try {
-    return { browser: name, cookies: toCookieEntries(fn(CF_DOMAINS)) };
+    return extractionResult(name, toCookieEntries(fn(CF_DOMAINS)));
   } catch (e) {
     return { browser: name, cookies: [], error: e instanceof Error ? e.message : String(e) };
   }
